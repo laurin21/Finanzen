@@ -558,6 +558,9 @@ with tab3:
 # ══════════════════════════════════════════════
 with tab4:
 
+    _GRAN_OPTS = ["Wöchentlich", "Monatlich", "Jährlich"]
+    _PLOT_CFG_KAT = {"locale": "de", "displaylogo": False}
+
     def _cat_table(df_src, total_months):
         stats = (
             df_src.groupby(c["col_category"])["_betrag_abs"]
@@ -582,9 +585,20 @@ with tab4:
             _white, ["Gesamt", "% Gesamt", "ø / Monat", "Buchungen"],
         ), stats
 
-    def _stacked_chart(df_src, title_col, color_key):
-        monthly = (
-            df_src.groupby(["_monat_dt", c["col_category"]])["_betrag_abs"]
+    def _stacked_chart(df_src, granularity):
+        df2 = df_src.copy()
+        if granularity == "Wöchentlich":
+            df2["_period"] = (
+                df2[c["col_date"]]
+                - pd.to_timedelta(df2[c["col_date"]].dt.dayofweek, unit="D")
+            )
+        elif granularity == "Jährlich":
+            df2["_period"] = df2[c["col_date"]].dt.to_period("Y").dt.to_timestamp()
+        else:
+            df2["_period"] = df2["_monat_dt"]
+
+        period_df = (
+            df2.groupby(["_period", c["col_category"]])["_betrag_abs"]
             .sum().reset_index()
         )
         order = (
@@ -593,25 +607,25 @@ with tab4:
         )
         fig = go.Figure()
         for cat in order:
-            sub = monthly[monthly[c["col_category"]] == cat]
+            sub = period_df[period_df[c["col_category"]] == cat]
             fig.add_trace(go.Bar(
-                x=sub["_monat_dt"], y=sub["_betrag_abs"], name=cat,
+                x=sub["_period"], y=sub["_betrag_abs"], name=cat,
                 hovertemplate=f"{cat}: %{{y:,.0f}} €<extra></extra>",
             ))
         fig.update_layout(**{**PLOT_CFG, "height": 320, "barmode": "stack",
             "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
-        return fig, monthly
+        return fig, period_df
 
-    def _trend_chart(df_src, monthly_df, n_top=5):
+    def _trend_chart(df_src, period_df, n_top=5):
         top = (
             df_src.groupby(c["col_category"])["_betrag_abs"].sum()
             .sort_values(ascending=False).head(n_top).index.tolist()
         )
         fig = go.Figure()
         for cat in top:
-            sub = monthly_df[monthly_df[c["col_category"]] == cat]
+            sub = period_df[period_df[c["col_category"]] == cat]
             fig.add_trace(go.Scatter(
-                x=sub["_monat_dt"], y=sub["_betrag_abs"], name=cat,
+                x=sub["_period"], y=sub["_betrag_abs"], name=cat,
                 mode="lines+markers", marker=dict(size=5),
                 hovertemplate=f"{cat}: %{{y:,.0f}} €<extra></extra>",
             ))
@@ -619,34 +633,35 @@ with tab4:
             "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
         return fig
 
-    # ── Ausgaben ──────────────────────────────
-    st.markdown(
-        "<div class='section-header'>Ausgaben nach Kategorie</div>",
-        unsafe_allow_html=True,
-    )
-    exp_styled, exp_stats = _cat_table(df_exp, n_months)
-    st.dataframe(exp_styled, use_container_width=True,
-                 height=min(400, 36 + len(exp_stats) * 35))
+    # ── Sub-Tabs ──────────────────────────────
+    kat_exp, kat_inc = st.tabs(["📉 Ausgaben", "📈 Einnahmen"])
 
-    fig_exp_stack, exp_monthly = _stacked_chart(df_exp, c["col_category"], "expense")
-    st.plotly_chart(fig_exp_stack, use_container_width=True, config={"locale": "de", "displaylogo": False})
-    st.plotly_chart(_trend_chart(df_exp, exp_monthly), use_container_width=True, config={"locale": "de", "displaylogo": False})
+    with kat_exp:
+        exp_styled, exp_stats = _cat_table(df_exp, n_months)
+        st.dataframe(exp_styled, use_container_width=True,
+                     height=min(400, 36 + len(exp_stats) * 35))
 
-    st.markdown("<div style='margin: 12px 0'></div>", unsafe_allow_html=True)
+        gran_exp = st.radio(
+            "Granularität Ausgaben", _GRAN_OPTS, index=1,
+            horizontal=True, label_visibility="collapsed", key="gran_kat_exp",
+        )
+        fig_exp_stack, exp_period = _stacked_chart(df_exp, gran_exp)
+        st.plotly_chart(fig_exp_stack, use_container_width=True, config=_PLOT_CFG_KAT)
+        st.plotly_chart(_trend_chart(df_exp, exp_period), use_container_width=True, config=_PLOT_CFG_KAT)
 
-    # ── Einnahmen ─────────────────────────────
-    st.markdown(
-        "<div class='section-header'>Einnahmen nach Kategorie</div>",
-        unsafe_allow_html=True,
-    )
-    inc_styled, inc_stats = _cat_table(df_inc, n_months)
-    st.dataframe(inc_styled, use_container_width=True,
-                 height=min(300, 36 + len(inc_stats) * 35))
+    with kat_inc:
+        inc_styled, inc_stats = _cat_table(df_inc, n_months)
+        st.dataframe(inc_styled, use_container_width=True,
+                     height=min(300, 36 + len(inc_stats) * 35))
 
-    fig_inc_stack, inc_monthly = _stacked_chart(df_inc, c["col_category"], "income")
-    st.plotly_chart(fig_inc_stack, use_container_width=True, config={"locale": "de", "displaylogo": False})
-    if len(inc_stats) > 1:
-        st.plotly_chart(_trend_chart(df_inc, inc_monthly), use_container_width=True, config={"locale": "de", "displaylogo": False})
+        gran_inc = st.radio(
+            "Granularität Einnahmen", _GRAN_OPTS, index=1,
+            horizontal=True, label_visibility="collapsed", key="gran_kat_inc",
+        )
+        fig_inc_stack, inc_period = _stacked_chart(df_inc, gran_inc)
+        st.plotly_chart(fig_inc_stack, use_container_width=True, config=_PLOT_CFG_KAT)
+        if len(inc_stats) > 1:
+            st.plotly_chart(_trend_chart(df_inc, inc_period), use_container_width=True, config=_PLOT_CFG_KAT)
 
 # ─────────────────────────────────────────────
 # BUDGET-EXPANDER

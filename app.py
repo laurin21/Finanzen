@@ -204,7 +204,7 @@ with tab1:
         st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
     with tog_col:
         show_total = st.toggle("Gesamt", value=False,
-                               help="Alle Aufzeichnungen von Start bis heute")
+                               help="Alle Aufzeichnungen von Start bis heute, sonst im Filter angegebener Zeitraum")
 
     if show_total:
         kpi_inc, kpi_exp, kpi_sav = inc_total, exp_total, sav_total

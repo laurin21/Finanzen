@@ -201,14 +201,6 @@ total_savings = total_income - total_expense
 savings_rate  = (total_savings / total_income * 100) if total_income > 0 else 0
 current_wealth = STARTING_WEALTH + df_all_today[c["col_amount"]].sum()
 
-active_desc = f' · Suche: "{desc_search.strip()}"' if desc_search.strip() else ""
-st.markdown(
-    f"<div style='color:#6b6b8a;font-size:13px;font-family:DM Mono,monospace;margin-bottom:20px'>"
-    f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
-    f" · {len(df):,} Transaktionen{active_desc}</div>",
-    unsafe_allow_html=True,
-)
-
 if len(df) == 0:
     st.warning("Keine Transaktionen für die gewählten Filter.")
     st.stop()

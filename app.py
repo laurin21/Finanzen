@@ -123,54 +123,55 @@ date_range = st.date_input(
 st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# NEUE TRANSAKTION (inline)
+# NEUE TRANSAKTION (inline) — deaktiviert
 # ─────────────────────────────────────────────
-st.markdown(
-    "<div style='font-size:11px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;"
-    "color:#6b6b8a;font-family:DM Mono,monospace;margin-bottom:6px'>Neue Transaktion</div>",
-    unsafe_allow_html=True,
-)
-with st.form("new_tx", clear_on_submit=True):
-    fi1, fi2, fi3, fi4 = st.columns([1, 1, 1, 2])
-    with fi1:
-        inp_date = st.date_input("Datum", value=today.date(), format="DD.MM.YYYY")
-    with fi2:
-        inp_betrag = st.number_input(
-            "Betrag (€)", value=0.0, step=0.01, format="%.2f",
-            help="Positiv = Einnahme · Negativ = Ausgabe",
-        )
-    with fi3:
-        inp_kat_sel = st.selectbox(
-            "Kategorie",
-            all_cats_by_freq + (["✏️ Neue Kategorie…"] if all_cats_by_freq else ["✏️ Neue Kategorie…"]),
-        )
-    with fi4:
-        inp_desc = st.text_input("Beschreibung", placeholder="z.B. REWE, Gehalt, Miete …")
+if False:
+    st.markdown(
+        "<div style='font-size:11px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;"
+        "color:#6b6b8a;font-family:DM Mono,monospace;margin-bottom:6px'>Neue Transaktion</div>",
+        unsafe_allow_html=True,
+    )
+    with st.form("new_tx", clear_on_submit=True):
+        fi1, fi2, fi3, fi4 = st.columns([1, 1, 1, 2])
+        with fi1:
+            inp_date = st.date_input("Datum", value=today.date(), format="DD.MM.YYYY")
+        with fi2:
+            inp_betrag = st.number_input(
+                "Betrag (€)", value=0.0, step=0.01, format="%.2f",
+                help="Positiv = Einnahme · Negativ = Ausgabe",
+            )
+        with fi3:
+            inp_kat_sel = st.selectbox(
+                "Kategorie",
+                all_cats_by_freq + (["✏️ Neue Kategorie…"] if all_cats_by_freq else ["✏️ Neue Kategorie…"]),
+            )
+        with fi4:
+            inp_desc = st.text_input("Beschreibung", placeholder="z.B. REWE, Gehalt, Miete …")
 
-    if inp_kat_sel == "✏️ Neue Kategorie…":
-        inp_kat_neu = st.text_input("Neue Kategorie eingeben")
-    else:
-        inp_kat_neu = ""
-
-    submitted = st.form_submit_button("💾 Speichern", use_container_width=True)
-    if submitted:
-        kat = inp_kat_neu.strip() if inp_kat_sel == "✏️ Neue Kategorie…" else inp_kat_sel
-        if not kat:
-            st.error("Bitte eine Kategorie angeben.")
+        if inp_kat_sel == "✏️ Neue Kategorie…":
+            inp_kat_neu = st.text_input("Neue Kategorie eingeben")
         else:
-            try:
-                append_transaction(
-                    inp_date.strftime("%d.%m.%Y"), inp_betrag, kat, inp_desc.strip()
-                )
-                st.cache_data.clear()
-                msg = f"✓  {inp_date.strftime('%d.%m.%Y')}  ·  {inp_betrag:+.2f} €  ·  {kat}"
-                if inp_desc.strip():
-                    msg += f"  ·  {inp_desc.strip()}"
-                st.success(msg)
-            except Exception as ex:
-                st.error(f"Fehler beim Speichern: {ex}")
+            inp_kat_neu = ""
 
-st.markdown("---")
+        submitted = st.form_submit_button("💾 Speichern", use_container_width=True)
+        if submitted:
+            kat = inp_kat_neu.strip() if inp_kat_sel == "✏️ Neue Kategorie…" else inp_kat_sel
+            if not kat:
+                st.error("Bitte eine Kategorie angeben.")
+            else:
+                try:
+                    append_transaction(
+                        inp_date.strftime("%d.%m.%Y"), inp_betrag, kat, inp_desc.strip()
+                    )
+                    st.cache_data.clear()
+                    msg = f"✓  {inp_date.strftime('%d.%m.%Y')}  ·  {inp_betrag:+.2f} €  ·  {kat}"
+                    if inp_desc.strip():
+                        msg += f"  ·  {inp_desc.strip()}"
+                    st.success(msg)
+                except Exception as ex:
+                    st.error(f"Fehler beim Speichern: {ex}")
+
+    st.markdown("---")
 
 # ─────────────────────────────────────────────
 # DATEN FILTERN
@@ -377,30 +378,6 @@ with tab1:
     fig_ev.update_layout(**PLOT_CFG, barmode="group", height=330)
     st.plotly_chart(fig_ev, use_container_width=True)
 
-    # Ausgaben nach Kategorie
-    st.markdown(
-        "<div class='section-header'>Ausgaben nach Kategorie</div>",
-        unsafe_allow_html=True,
-    )
-    cat_df = (
-        df_exp_d.groupby(c["col_category"])["_betrag_abs"]
-        .sum().reset_index().sort_values("_betrag_abs", ascending=True)
-    )
-    if len(cat_df):
-        fig2 = go.Figure(go.Bar(
-            x=cat_df["_betrag_abs"], y=cat_df[c["col_category"]], orientation="h",
-            marker=dict(
-                color=cat_df["_betrag_abs"],
-                colorscale=[[0, "#2a2a35"], [1, C["expense"]]], showscale=False,
-            ),
-            text=cat_df["_betrag_abs"].apply(lambda x: f"{x:,.0f} €"),
-            textposition="outside", textfont=dict(color="#9a9ab0", size=11),
-        ))
-        fig2.update_layout(**{**PLOT_CFG, "height": max(200, len(cat_df) * 36),
-            "xaxis": dict(visible=False),
-            "yaxis": dict(gridcolor="rgba(0,0,0,0)", linecolor="rgba(0,0,0,0)")})
-        st.plotly_chart(fig2, use_container_width=True)
-
     # Vermögensverlauf
     st.markdown(
         "<div class='section-header'>Vermögensverlauf</div>",
@@ -561,89 +538,96 @@ with tab3:
 
 # ══════════════════════════════════════════════
 with tab4:
+
+    def _cat_table(df_src, total_months):
+        stats = (
+            df_src.groupby(c["col_category"])["_betrag_abs"]
+            .agg(Gesamt="sum", Buchungen="count")
+            .reset_index()
+            .rename(columns={c["col_category"]: "Kategorie"})
+        )
+        grand = stats["Gesamt"].sum()
+        stats["% Gesamt"]  = stats["Gesamt"] / grand * 100 if grand else 0
+        stats["ø / Monat"] = stats["Gesamt"] / total_months
+        stats = stats.sort_values("Gesamt", ascending=False).reset_index(drop=True)
+
+        def _white(v):
+            return "color: #e8e6e1" if isinstance(v, (int, float)) else ""
+
+        return _style_map(
+            stats.style.format(
+                {"Gesamt": "{:,.0f} €", "% Gesamt": "{:.1f} %",
+                 "ø / Monat": "{:,.0f} €", "Buchungen": "{:,.0f}"},
+                na_rep="–",
+            ),
+            _white, ["Gesamt", "% Gesamt", "ø / Monat", "Buchungen"],
+        ), stats
+
+    def _stacked_chart(df_src, title_col, color_key):
+        monthly = (
+            df_src.groupby(["_monat_dt", c["col_category"]])["_betrag_abs"]
+            .sum().reset_index()
+        )
+        order = (
+            df_src.groupby(c["col_category"])["_betrag_abs"].sum()
+            .sort_values(ascending=True).index.tolist()
+        )
+        fig = go.Figure()
+        for cat in order:
+            sub = monthly[monthly[c["col_category"]] == cat]
+            fig.add_trace(go.Bar(
+                x=sub["_monat_dt"], y=sub["_betrag_abs"], name=cat,
+                hovertemplate=f"{cat}: %{{y:,.0f}} €<extra></extra>",
+            ))
+        fig.update_layout(**{**PLOT_CFG, "height": 320, "barmode": "stack",
+            "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
+        return fig, monthly
+
+    def _trend_chart(df_src, monthly_df, n_top=5):
+        top = (
+            df_src.groupby(c["col_category"])["_betrag_abs"].sum()
+            .sort_values(ascending=False).head(n_top).index.tolist()
+        )
+        fig = go.Figure()
+        for cat in top:
+            sub = monthly_df[monthly_df[c["col_category"]] == cat]
+            fig.add_trace(go.Scatter(
+                x=sub["_monat_dt"], y=sub["_betrag_abs"], name=cat,
+                mode="lines+markers", marker=dict(size=5),
+                hovertemplate=f"{cat}: %{{y:,.0f}} €<extra></extra>",
+            ))
+        fig.update_layout(**{**PLOT_CFG, "height": 280,
+            "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
+        return fig
+
+    # ── Ausgaben ──────────────────────────────
     st.markdown(
-        "<div class='section-header'>Kategorien-Übersicht</div>",
+        "<div class='section-header'>Ausgaben nach Kategorie</div>",
         unsafe_allow_html=True,
     )
+    exp_styled, exp_stats = _cat_table(df_exp, n_months)
+    st.dataframe(exp_styled, use_container_width=True,
+                 height=min(400, 36 + len(exp_stats) * 35))
 
-    # Übersichtstabelle (gefilterte Daten)
-    cat_stats = (
-        df_exp.groupby(c["col_category"])["_betrag_abs"]
-        .agg(Gesamt="sum", Buchungen="count")
-        .reset_index()
-        .rename(columns={c["col_category"]: "Kategorie"})
-    )
-    cat_stats["% Gesamt"]  = cat_stats["Gesamt"] / cat_stats["Gesamt"].sum() * 100
-    cat_stats["ø / Monat"] = cat_stats["Gesamt"] / n_months
-    cat_stats = cat_stats.sort_values("Gesamt", ascending=False).reset_index(drop=True)
+    fig_exp_stack, exp_monthly = _stacked_chart(df_exp, c["col_category"], "expense")
+    st.plotly_chart(fig_exp_stack, use_container_width=True)
+    st.plotly_chart(_trend_chart(df_exp, exp_monthly), use_container_width=True)
 
-    def _col_cat(v):
-        if isinstance(v, (int, float)):
-            return "color: #e8e6e1"
-        return ""
+    st.markdown("<div style='margin: 12px 0'></div>", unsafe_allow_html=True)
 
-    cat_styled = _style_map(
-        cat_stats.style.format(
-            {
-                "Gesamt":    "{:,.0f} €",
-                "% Gesamt":  "{:.1f} %",
-                "ø / Monat": "{:,.0f} €",
-                "Buchungen": "{:,.0f}",
-            },
-            na_rep="–",
-        ),
-        _col_cat,
-        ["Gesamt", "% Gesamt", "ø / Monat", "Buchungen"],
-    )
-    st.dataframe(cat_styled, use_container_width=True,
-                 height=min(400, 36 + len(cat_stats) * 35))
-
-    # Ausgaben nach Kategorie über Zeit (gestapelt)
+    # ── Einnahmen ─────────────────────────────
     st.markdown(
-        "<div class='section-header'>Ausgaben nach Kategorie über Zeit</div>",
+        "<div class='section-header'>Einnahmen nach Kategorie</div>",
         unsafe_allow_html=True,
     )
-    cat_monthly = (
-        df_exp.groupby(["_monat_dt", c["col_category"]])["_betrag_abs"]
-        .sum().reset_index()
-    )
-    cat_order = (
-        df_exp.groupby(c["col_category"])["_betrag_abs"].sum()
-        .sort_values(ascending=True).index.tolist()
-    )
-    fig_stack = go.Figure()
-    for cat in cat_order:
-        sub = cat_monthly[cat_monthly[c["col_category"]] == cat]
-        fig_stack.add_trace(go.Bar(
-            x=sub["_monat_dt"], y=sub["_betrag_abs"], name=cat,
-            hovertemplate=f"{cat}: %{{y:,.0f}} €<extra></extra>",
-        ))
-    fig_stack.update_layout(**{**PLOT_CFG, "height": 360,
-        "barmode": "stack",
-        "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
-    st.plotly_chart(fig_stack, use_container_width=True)
+    inc_styled, inc_stats = _cat_table(df_inc, n_months)
+    st.dataframe(inc_styled, use_container_width=True,
+                 height=min(300, 36 + len(inc_stats) * 35))
 
-    # Top-Kategorien Trend (Linienchart)
-    st.markdown(
-        "<div class='section-header'>Top-Kategorien im Trend</div>",
-        unsafe_allow_html=True,
-    )
-    top_cats = (
-        df_exp.groupby(c["col_category"])["_betrag_abs"].sum()
-        .sort_values(ascending=False).head(6).index.tolist()
-    )
-    fig_trend = go.Figure()
-    for cat in top_cats:
-        sub = cat_monthly[cat_monthly[c["col_category"]] == cat]
-        fig_trend.add_trace(go.Scatter(
-            x=sub["_monat_dt"], y=sub["_betrag_abs"], name=cat,
-            mode="lines+markers",
-            marker=dict(size=5),
-            hovertemplate=f"{cat}: %{{y:,.0f}} €<extra></extra>",
-        ))
-    fig_trend.update_layout(**{**PLOT_CFG, "height": 300,
-        "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
-    st.plotly_chart(fig_trend, use_container_width=True)
+    fig_inc_stack, inc_monthly = _stacked_chart(df_inc, c["col_category"], "income")
+    st.plotly_chart(fig_inc_stack, use_container_width=True)
+    if len(inc_stats) > 1:
+        st.plotly_chart(_trend_chart(df_inc, inc_monthly), use_container_width=True)
 
 # ─────────────────────────────────────────────
 # BUDGET-EXPANDER
@@ -717,9 +701,10 @@ with st.expander(f"\U0001f4cb Alle Transaktionen ({len(df):,})", expanded=False)
     st.dataframe(styled_disp, use_container_width=True, height=420)
 
 # ─────────────────────────────────────────────
-# TRANSAKTION BEARBEITEN / LÖSCHEN
+# TRANSAKTION BEARBEITEN / LÖSCHEN — deaktiviert
 # ─────────────────────────────────────────────
-with st.expander("✏️ Transaktion bearbeiten / löschen", expanded=False):
+if False:
+ with st.expander("✏️ Transaktion bearbeiten / löschen", expanded=False):
     ed1, ed2, ed3 = st.columns([1, 1, 1])
     with ed1:
         ed_start = st.date_input(

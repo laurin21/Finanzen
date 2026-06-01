@@ -285,15 +285,15 @@ def _style_map(styler, func, subset):
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs([
+tab_a, tab_m, tab_k, tab_s = st.tabs([
     "\U0001f4ca Analyse",
-    "\U0001f4c8 Sparquoten",
     "\U0001f4c5 Monatsübersicht",
     "\U0001f5c2️ Kategorien",
+    "\U0001f4c8 Sparquoten",
 ])
 
 # ══════════════════════════════════════════════
-with tab1:
+with tab_a:
 
     st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
 
@@ -348,22 +348,56 @@ with tab1:
         )
 
     gp = group_by_period(df, granularity)
-    fig_ev = go.Figure()
-    fig_ev.add_trace(go.Bar(
-        x=gp["_period"], y=gp["Einnahme"], name="Einnahmen",
-        marker_color=C["income"], opacity=0.85,
-    ))
-    fig_ev.add_trace(go.Bar(
-        x=gp["_period"], y=gp["Ausgabe"], name="Ausgaben",
-        marker_color=C["expense"], opacity=0.85,
-    ))
-    fig_ev.add_trace(go.Scatter(
-        x=gp["_period"], y=gp["Ersparnis"], name="Ersparnis",
-        mode="lines+markers",
-        line=dict(color=C["savings"], width=2.5), marker=dict(size=5),
-    ))
-    fig_ev.update_layout(**PLOT_CFG, barmode="group", height=330)
-    st.plotly_chart(fig_ev, use_container_width=True, config={"locale": "de", "displaylogo": False})
+
+    ev_chart_tab, ev_table_tab = st.tabs(["📊 Diagramm", "📋 Tabelle"])
+
+    with ev_chart_tab:
+        fig_ev = go.Figure()
+        fig_ev.add_trace(go.Bar(
+            x=gp["_period"], y=gp["Einnahme"], name="Einnahmen",
+            marker_color=C["income"], opacity=0.85,
+        ))
+        fig_ev.add_trace(go.Bar(
+            x=gp["_period"], y=gp["Ausgabe"], name="Ausgaben",
+            marker_color=C["expense"], opacity=0.85,
+        ))
+        fig_ev.add_trace(go.Scatter(
+            x=gp["_period"], y=gp["Ersparnis"], name="Ersparnis",
+            mode="lines+markers",
+            line=dict(color=C["savings"], width=2.5), marker=dict(size=5),
+        ))
+        fig_ev.update_layout(**PLOT_CFG, barmode="group", height=330)
+        st.plotly_chart(fig_ev, use_container_width=True, config={"locale": "de", "displaylogo": False})
+
+    with ev_table_tab:
+        def _fmt_period(dt, gran):
+            if gran == "Wöchentlich":
+                return f"{dt.strftime('%d.%m.')} – {(dt + pd.Timedelta(days=6)).strftime('%d.%m.%Y')}"
+            if gran == "Jährlich":
+                return str(dt.year)
+            return dt.strftime("%b %Y")
+
+        gp_disp = gp.copy()
+        gp_disp["Zeitraum"] = gp_disp["_period"].apply(lambda d: _fmt_period(d, granularity))
+        gp_disp = gp_disp[["Zeitraum", "Einnahme", "Ausgabe", "Ersparnis"]].copy()
+        gp_disp.columns = ["Zeitraum", "Einnahmen", "Ausgaben", "Gewinn"]
+        gp_disp = gp_disp.iloc[::-1].reset_index(drop=True)
+
+        def _col_ev(v):
+            if isinstance(v, (int, float)):
+                return "color: #e05c6a" if v < 0 else "color: #e8e6e1"
+            return ""
+
+        styled_ev = _style_map(
+            gp_disp.style.format(
+                {"Einnahmen": "{:,.0f} €", "Ausgaben": "{:,.0f} €", "Gewinn": "{:+,.0f} €"},
+                na_rep="–",
+            ),
+            _col_ev, ["Einnahmen", "Ausgaben", "Gewinn"],
+        )
+        st.dataframe(styled_ev, use_container_width=True,
+                     height=min(500, 36 + len(gp_disp) * 35),
+                     hide_index=True)
 
     # Vermögensverlauf
     st.markdown(
@@ -460,7 +494,7 @@ with tab1:
         )
 
 # ══════════════════════════════════════════════
-with tab2:
+with tab_s:
     with st.expander("ℹ️ Was ist die Sparquote?"):
         st.markdown(
             "Die **Sparquote** gibt an, welcher Anteil der Einnahmen gespart wurde — "
@@ -549,7 +583,7 @@ with tab2:
     st.plotly_chart(fig5, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
 # ══════════════════════════════════════════════
-with tab3:
+with tab_m:
     st.markdown(
         "<div class='section-header'>Alle Monate seit Aufzeichnungsbeginn</div>",
         unsafe_allow_html=True,
@@ -600,10 +634,11 @@ with tab3:
         _col_monthly, euro_cols,
     )
     st.dataframe(styled_tbl, use_container_width=True,
-                 height=min(600, 36 + len(tbl) * 35))
+                 height=min(600, 36 + len(tbl) * 35),
+                 hide_index=True)
 
 # ══════════════════════════════════════════════
-with tab4:
+with tab_k:
 
     _GRAN_OPTS = ["Wöchentlich", "Monatlich", "Jährlich"]
     _PLOT_CFG_KAT = {"locale": "de", "displaylogo": False}
@@ -616,20 +651,23 @@ with tab4:
             .rename(columns={c["col_category"]: "Kategorie"})
         )
         grand = stats["Gesamt"].sum()
-        stats["% Gesamt"]  = stats["Gesamt"] / grand * 100 if grand else 0
-        stats["ø / Monat"] = stats["Gesamt"] / total_months
+        stats["% Gesamt"]    = stats["Gesamt"] / grand * 100 if grand else 0
+        stats["ø / Monat"]   = stats["Gesamt"] / total_months
+        stats["€ / Buchung"] = stats["Gesamt"] / stats["Buchungen"].replace(0, float("nan"))
         stats = stats.sort_values("Gesamt", ascending=False).reset_index(drop=True)
 
         def _white(v):
             return "color: #e8e6e1" if isinstance(v, (int, float)) else ""
 
+        num_cols = ["Gesamt", "% Gesamt", "ø / Monat", "Buchungen", "€ / Buchung"]
         return _style_map(
             stats.style.format(
                 {"Gesamt": "{:,.0f} €", "% Gesamt": "{:.1f} %",
-                 "ø / Monat": "{:,.0f} €", "Buchungen": "{:,.0f}"},
+                 "ø / Monat": "{:,.0f} €", "Buchungen": "{:,.0f}",
+                 "€ / Buchung": "{:,.0f} €"},
                 na_rep="–",
             ),
-            _white, ["Gesamt", "% Gesamt", "ø / Monat", "Buchungen"],
+            _white, num_cols,
         ), stats
 
     def _stacked_chart(df_src, granularity):
@@ -686,7 +724,8 @@ with tab4:
     with kat_exp:
         exp_styled, exp_stats = _cat_table(df_exp, n_months)
         st.dataframe(exp_styled, use_container_width=True,
-                     height=min(400, 36 + len(exp_stats) * 35))
+                     height=min(400, 36 + len(exp_stats) * 35),
+                     hide_index=True)
 
         gran_exp = st.radio(
             "Granularität Ausgaben", _GRAN_OPTS, index=1,
@@ -699,7 +738,8 @@ with tab4:
     with kat_inc:
         inc_styled, inc_stats = _cat_table(df_inc, n_months)
         st.dataframe(inc_styled, use_container_width=True,
-                     height=min(300, 36 + len(inc_stats) * 35))
+                     height=min(300, 36 + len(inc_stats) * 35),
+                     hide_index=True)
 
         gran_inc = st.radio(
             "Granularität Einnahmen", _GRAN_OPTS, index=1,

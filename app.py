@@ -79,7 +79,12 @@ def load_data() -> pd.DataFrame:
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     gc = gspread.authorize(creds)
     ws = gc.open_by_key(spreadsheet_id).worksheet(worksheet_name)
-    return pd.DataFrame(ws.get_all_records())
+    rows = ws.get_all_values()
+    if not rows:
+        return pd.DataFrame()
+    headers = rows[0]
+    df = pd.DataFrame(rows[1:], columns=headers)
+    return df.loc[:, df.columns.str.strip() != ""]
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:

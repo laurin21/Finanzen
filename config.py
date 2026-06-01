@@ -70,7 +70,8 @@ def load_data() -> pd.DataFrame:
         return pd.DataFrame()
     headers = rows[0]
     df = pd.DataFrame(rows[1:], columns=headers)
-    return df.loc[:, df.columns.str.strip() != ""]
+    df["_sheet_row"] = range(2, len(rows) + 1)  # 1-indexed; row 1 = header
+    return df.loc[:, (df.columns.str.strip() != "") | (df.columns == "_sheet_row")]
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:
@@ -113,3 +114,31 @@ def append_transaction(datum: str, betrag: float, kategorie: str, beschreibung: 
         [row_map.get(h.strip(), "") for h in headers],
         value_input_option="RAW",
     )
+
+
+def _get_ws():
+    creds_dict     = dict(st.secrets["gcp_service_account"])
+    spreadsheet_id = st.secrets.get("spreadsheet_id", CONFIG["spreadsheet_id"])
+    worksheet_name = st.secrets.get("worksheet_name", CONFIG["worksheet_name"])
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds  = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    return gspread.authorize(creds).open_by_key(spreadsheet_id).worksheet(worksheet_name)
+
+
+def update_transaction(sheet_row: int, datum: str, betrag: float,
+                       kategorie: str, beschreibung: str) -> None:
+    ws      = _get_ws()
+    headers = ws.row_values(1)
+    row_map = {
+        CONFIG["col_date"]:        datum,
+        CONFIG["col_amount"]:      str(betrag).replace(".", ","),
+        CONFIG["col_category"]:    kategorie,
+        CONFIG["col_description"]: beschreibung,
+    }
+    row      = [row_map.get(h.strip(), "") for h in headers]
+    end_col  = chr(ord("A") + len(headers) - 1)
+    ws.update(f"A{sheet_row}:{end_col}{sheet_row}", [row], value_input_option="RAW")
+
+
+def delete_transaction(sheet_row: int) -> None:
+    _get_ws().delete_rows(sheet_row)

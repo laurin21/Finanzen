@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from config import CONFIG, STARTING_WEALTH, PLOT_CFG, C, CSS, load_data, prepare
+from config import CONFIG, STARTING_WEALTH, PLOT_CFG, C, CSS, load_data, prepare, append_transaction
 
 st.set_page_config(page_title="Finanzanalyse", page_icon="📊", layout="wide")
 st.markdown(CSS, unsafe_allow_html=True)
@@ -156,6 +156,54 @@ st.markdown(
     f" · {len(df):,} Transaktionen{active_desc}</div>",
     unsafe_allow_html=True,
 )
+
+# ─────────────────────────────────────────────
+# EINGABE NEUER TRANSAKTIONEN
+# ─────────────────────────────────────────────
+with st.expander("➕ Neue Transaktion eintragen", expanded=False):
+    with st.form("new_tx", clear_on_submit=True):
+        fi1, fi2, fi3, fi4 = st.columns([1, 1, 1, 2])
+        with fi1:
+            inp_date = st.date_input("Datum", value=today.date(), format="DD.MM.YYYY")
+        with fi2:
+            inp_betrag = st.number_input(
+                "Betrag (€)",
+                value=0.0, step=0.01, format="%.2f",
+                help="Positiv = Einnahme · Negativ = Ausgabe",
+            )
+        with fi3:
+            cat_options  = sorted(all_cats) + ["✏️ Neue Kategorie…"]
+            inp_kat_sel  = st.selectbox("Kategorie", cat_options)
+        with fi4:
+            inp_desc = st.text_input("Beschreibung", placeholder="z.B. REWE, Gehalt, Miete …")
+
+        if inp_kat_sel == "✏️ Neue Kategorie…":
+            inp_kat_neu = st.text_input("Neue Kategorie eingeben")
+        else:
+            inp_kat_neu = ""
+
+        submitted = st.form_submit_button("💾 Speichern", use_container_width=True)
+
+        if submitted:
+            kat = inp_kat_neu.strip() if inp_kat_sel == "✏️ Neue Kategorie…" else inp_kat_sel
+            if not kat:
+                st.error("Bitte eine Kategorie angeben.")
+            else:
+                try:
+                    append_transaction(
+                        inp_date.strftime("%d.%m.%Y"),
+                        inp_betrag,
+                        kat,
+                        inp_desc.strip(),
+                    )
+                    st.cache_data.clear()
+                    st.success(
+                        f"✓ Gespeichert · {inp_date.strftime('%d.%m.%Y')}"
+                        f" · {inp_betrag:+.2f} € · {kat}"
+                        + (f" · {inp_desc.strip()}" if inp_desc.strip() else "")
+                    )
+                except Exception as ex:
+                    st.error(f"Fehler beim Speichern: {ex}")
 
 if len(df) == 0:
     st.warning("Keine Transaktionen für die gewählten Filter.")
@@ -485,27 +533,26 @@ with tab3:
     tbl = tbl.reset_index().rename(columns={"index": "Monat"})
     tbl = tbl.iloc[::-1].reset_index(drop=True)   # neueste zuerst
 
-    euro_fmt = "%.0f €"
-    st.dataframe(
-        tbl,
-        use_container_width=True,
-        height=min(600, 36 + len(tbl) * 35),
-        column_config={
-            "Monat":       st.column_config.TextColumn("Monat", width="small"),
-            "Einnahmen":   st.column_config.NumberColumn("Einnahmen",   format=euro_fmt),
-            "Ausgaben":    st.column_config.NumberColumn("Ausgaben",    format=euro_fmt),
-            "Sparmenge":   st.column_config.NumberColumn("Sparmenge",   format=euro_fmt),
-            "Vermögen":    st.column_config.NumberColumn("Vermögen",    format=euro_fmt),
-            "ø Gesamt":    st.column_config.NumberColumn("ø Gesamt",    format=euro_fmt,
-                           help="Ø Sparmenge pro Monat seit Aufzeichnungsbeginn (kumulativ)"),
-            "ø 3 Monate":  st.column_config.NumberColumn("ø 3M",        format=euro_fmt,
-                           help="Ø Sparmenge der letzten 3 Monate"),
-            "ø 6 Monate":  st.column_config.NumberColumn("ø 6M",        format=euro_fmt,
-                           help="Ø Sparmenge der letzten 6 Monate"),
-            "ø 12 Monate": st.column_config.NumberColumn("ø 12M",       format=euro_fmt,
-                           help="Ø Sparmenge der letzten 12 Monate (min. 3 Monate Daten)"),
-        },
+    euro_cols = ["Einnahmen", "Ausgaben", "Sparmenge", "Vermögen",
+                 "ø Gesamt", "ø 3 Monate", "ø 6 Monate", "ø 12 Monate"]
+
+    def _col_monthly(v):
+        try:
+            if pd.isna(v):
+                return "color: #4a4a6a"
+        except (TypeError, ValueError):
+            pass
+        if isinstance(v, (int, float)):
+            return "color: #e05c6a" if v < 0 else "color: #e8e6e1"
+        return ""
+
+    styled_tbl = (
+        tbl.style
+        .format("{:,.0f} €", subset=euro_cols, na_rep="–")
+        .map(_col_monthly, subset=euro_cols)
     )
+    st.dataframe(styled_tbl, use_container_width=True,
+                 height=min(600, 36 + len(tbl) * 35))
 
 # ─────────────────────────────────────────────
 # BUDGET-EXPANDER
@@ -562,12 +609,21 @@ with st.expander(f"\U0001f4cb Alle Transaktionen ({len(df):,})", expanded=False)
     show_cols = [col for col in show_cols if col in df.columns]
     disp      = df[show_cols].sort_values(c["col_date"], ascending=False).copy()
     disp[c["col_date"]] = disp[c["col_date"]].dt.strftime("%d.%m.%Y")
-    st.dataframe(
-        disp.reset_index(drop=True),
-        use_container_width=True,
-        height=420,
-        column_config={
-            c["col_amount"]: st.column_config.NumberColumn(format="%.2f €"),
-            c["col_date"]:   st.column_config.TextColumn("Datum"),
-        },
+    disp = disp.reset_index(drop=True)
+
+    def _col_amount(v):
+        try:
+            if pd.isna(v):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        if isinstance(v, (int, float)):
+            return "color: #5dd4a0" if v > 0 else "color: #e8e6e1"
+        return ""
+
+    styled_disp = (
+        disp.style
+        .format("{:,.2f} €", subset=[c["col_amount"]])
+        .map(_col_amount, subset=[c["col_amount"]])
     )
+    st.dataframe(styled_disp, use_container_width=True, height=420)

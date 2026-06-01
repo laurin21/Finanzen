@@ -91,3 +91,25 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     df["_monat_str"]  = df[c["col_date"]].dt.strftime("%b %Y")
     df["_jahr"]       = df[c["col_date"]].dt.year
     return df.sort_values(c["col_date"]).reset_index(drop=True)
+
+
+def append_transaction(datum: str, betrag: float, kategorie: str, beschreibung: str) -> None:
+    """Hängt eine neue Transaktion ans Google Sheet an."""
+    creds_dict     = dict(st.secrets["gcp_service_account"])
+    spreadsheet_id = st.secrets.get("spreadsheet_id", CONFIG["spreadsheet_id"])
+    worksheet_name = st.secrets.get("worksheet_name", CONFIG["worksheet_name"])
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds  = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    gc     = gspread.authorize(creds)
+    ws     = gc.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+    headers = ws.row_values(1)
+    row_map = {
+        CONFIG["col_date"]:        datum,
+        CONFIG["col_amount"]:      str(betrag).replace(".", ","),
+        CONFIG["col_category"]:    kategorie,
+        CONFIG["col_description"]: beschreibung,
+    }
+    ws.append_row(
+        [row_map.get(h.strip(), "") for h in headers],
+        value_input_option="RAW",
+    )

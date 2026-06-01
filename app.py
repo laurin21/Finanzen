@@ -18,6 +18,7 @@ except Exception as e:
     load_error = str(e)
 
 today = pd.Timestamp.today().normalize()
+c     = CONFIG
 
 # ─────────────────────────────────────────────
 # SIDEBAR — Filter
@@ -34,13 +35,21 @@ with st.sidebar:
             st.rerun()
 
         st.markdown("---")
-        st.markdown("**Filter**")
 
-        df_all_today = df_all[df_all[CONFIG["col_date"]] <= today]
-        years        = sorted(df_all_today["_jahr"].unique(), reverse=True)
-        sel_years    = st.multiselect("Jahr", years, default=years)
+        min_date = df_all[c["col_date"]].min().date()
+        max_date = df_all[c["col_date"]].max().date()
 
-        all_cats = sorted(df_all[CONFIG["col_category"]].dropna().unique())
+        st.markdown("**Zeitraum**")
+        date_range = st.date_input(
+            "Zeitraum",
+            value=(min_date, today.date()),
+            min_value=min_date,
+            max_value=max_date,
+            format="DD.MM.YYYY",
+            label_visibility="collapsed",
+        )
+
+        all_cats = sorted(df_all[c["col_category"]].dropna().unique())
         sel_cats = st.multiselect("Kategorien", all_cats, default=all_cats)
 
         desc_search = st.text_input(
@@ -48,6 +57,18 @@ with st.sidebar:
             placeholder="z.B. REWE, Zugticket …",
             help="Suche über alle Beschreibungen (Groß-/Kleinschreibung egal)"
         )
+
+        st.markdown("---")
+        st.markdown("**Budgets** (€/Monat)")
+
+        for cat in all_cats:
+            if f"budget_{cat}" not in st.session_state:
+                st.session_state[f"budget_{cat}"] = float(CONFIG["budgets"].get(cat, 0))
+
+        with st.expander("✏️ Anpassen"):
+            for cat in sorted(all_cats):
+                st.number_input(cat, min_value=0.0, step=10.0, format="%.0f",
+                                key=f"budget_{cat}")
 
         st.markdown("---")
         st.markdown(
@@ -102,14 +123,19 @@ streamlit run app.py
     st.stop()
 
 # ─────────────────────────────────────────────
-# DATEN FILTERN (default: bis heute)
+# DATEN FILTERN
 # ─────────────────────────────────────────────
-c             = CONFIG
-df_all_today  = df_all[df_all[c["col_date"]] <= today]
-df            = df_all_today.copy()
+df_all_today = df_all[df_all[c["col_date"]] <= today]
 
-if sel_years:
-    df = df[df["_jahr"].isin(sel_years)]
+if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    start_dt = pd.Timestamp(date_range[0])
+    end_dt   = pd.Timestamp(date_range[1])
+else:
+    start_dt = pd.Timestamp(df_all[c["col_date"]].min())
+    end_dt   = today
+
+df = df_all[(df_all[c["col_date"]] >= start_dt) & (df_all[c["col_date"]] <= end_dt)].copy()
+
 if sel_cats:
     df = df[df[c["col_category"]].isin(sel_cats)]
 if desc_search.strip():
@@ -288,15 +314,15 @@ st.plotly_chart(fig4, use_container_width=True)
 st.markdown("<div class='section-header'>Budgetvergleich (Ø Monat vs. Ziel)</div>", unsafe_allow_html=True)
 
 avg_by_cat  = (df_exp.groupby(c["col_category"])["_betrag_abs"].sum() / n_months).to_dict()
-budgets     = CONFIG["budgets"]
-budget_cats = [cat for cat in budgets if cat in avg_by_cat]
+cats_with_budget = [cat for cat in sorted(avg_by_cat)
+                    if st.session_state.get(f"budget_{cat}", 0) > 0]
 
-if budget_cats:
+if cats_with_budget:
     bcols = st.columns(2)
-    for i, cat in enumerate(budget_cats):
-        actual    = avg_by_cat.get(cat, 0)
-        budget    = budgets[cat]
-        pct       = min(actual / budget * 100 if budget > 0 else 0, 100)
+    for i, cat in enumerate(cats_with_budget):
+        actual    = avg_by_cat[cat]
+        budget    = st.session_state[f"budget_{cat}"]
+        pct       = min(actual / budget * 100, 100)
         over      = actual > budget
         bar_color = C["expense"] if over else C["income"]
         status    = f"<span style='color:{bar_color}'>{'↑ über Budget' if over else '✓ ok'}</span>"
@@ -313,7 +339,7 @@ if budget_cats:
                 </div>
             </div>""", unsafe_allow_html=True)
 else:
-    st.info("Budgets in `CONFIG['budgets']` in config.py eintragen, um diesen Bereich zu nutzen.")
+    st.info("Budgets in der Seitenleiste unter **Budgets → ✏️ Anpassen** eintragen, um diesen Bereich zu nutzen.")
 
 # ─────────────────────────────────────────────
 # TRANSAKTIONS-TABELLE

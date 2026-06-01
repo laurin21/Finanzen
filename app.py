@@ -20,8 +20,18 @@ except Exception as e:
 today = pd.Timestamp.today().normalize()
 c     = CONFIG
 
+# Vorberechnungen für Sidebar (braucht geladene Daten)
+all_cats = sorted(df_all[c["col_category"]].dropna().unique()) if data_ok else []
+min_date = df_all[c["col_date"]].min().date() if data_ok else today.date()
+max_date = df_all[c["col_date"]].max().date() if data_ok else today.date()
+
+if data_ok:
+    for cat in all_cats:
+        if f"budget_{cat}" not in st.session_state:
+            st.session_state[f"budget_{cat}"] = float(CONFIG["budgets"].get(cat, 0))
+
 # ─────────────────────────────────────────────
-# SIDEBAR — minimal
+# SIDEBAR — Kategorien & Beschreibung
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📊 Finanzanalyse")
@@ -32,6 +42,14 @@ with st.sidebar:
         if st.button("🔄 Neu laden", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
+
+        st.markdown("---")
+        sel_cats = st.multiselect("Kategorien", all_cats, default=all_cats)
+        desc_search = st.text_input(
+            "🔍 Beschreibung filtern",
+            placeholder="z.B. REWE, Zugticket …",
+            help="Suche über alle Beschreibungen (Groß-/Kleinschreibung egal)",
+        )
         st.markdown("---")
         st.markdown(
             "<div style='font-size:11px;color:#4a4a6a;font-family:DM Mono,monospace'>"
@@ -91,36 +109,17 @@ streamlit run app.py
 st.markdown("# Finanzanalyse")
 
 # ─────────────────────────────────────────────
-# FILTER-EXPANDER
+# ZEITRAUM-EXPANDER
 # ─────────────────────────────────────────────
-all_cats = sorted(df_all[c["col_category"]].dropna().unique())
-min_date = df_all[c["col_date"]].min().date()
-max_date = df_all[c["col_date"]].max().date()
-
-for cat in all_cats:
-    if f"budget_{cat}" not in st.session_state:
-        st.session_state[f"budget_{cat}"] = float(CONFIG["budgets"].get(cat, 0))
-
-with st.expander("🔍 Filter", expanded=False):
-    fc1, fc2, fc3 = st.columns([2, 2, 2])
-    with fc1:
-        st.markdown("**Zeitraum**")
-        date_range = st.date_input(
-            "Zeitraum",
-            value=(min_date, today.date()),
-            min_value=min_date,
-            max_value=max_date,
-            format="DD.MM.YYYY",
-            label_visibility="collapsed",
-        )
-    with fc2:
-        sel_cats = st.multiselect("Kategorien", all_cats, default=all_cats)
-    with fc3:
-        desc_search = st.text_input(
-            "🔍 Beschreibung filtern",
-            placeholder="z.B. REWE, Zugticket …",
-            help="Suche über alle Beschreibungen (Groß-/Kleinschreibung egal)",
-        )
+with st.expander("📅 Analysezeitraum anpassen", expanded=False):
+    date_range = st.date_input(
+        "Zeitraum",
+        value=(min_date, today.date()),
+        min_value=min_date,
+        max_value=max_date,
+        format="DD.MM.YYYY",
+        label_visibility="collapsed",
+    )
 
 # ─────────────────────────────────────────────
 # DATEN FILTERN
@@ -180,30 +179,16 @@ def build_mw(df_src: pd.DataFrame) -> pd.DataFrame:
     return mw
 
 
-mw_filtered = build_mw(df)
-mw_all_t    = build_mw(df_all_today)
-
-df_inc_total   = df_all_today[df_all_today["_typ"] == "Einnahme"]
-df_exp_total   = df_all_today[df_all_today["_typ"] == "Ausgabe"]
-n_months_total = max(df_all_today["_monat_dt"].nunique(), 1)
-inc_total      = df_inc_total["_betrag_abs"].sum()
-exp_total      = df_exp_total["_betrag_abs"].sum()
-sav_total      = inc_total - exp_total
-rate_total     = (sav_total / inc_total * 100) if inc_total > 0 else 0
-
-
 def group_by_period(df_src: pd.DataFrame, granularity: str) -> pd.DataFrame:
+    df2 = df_src.copy()
     if granularity == "Wöchentlich":
-        df2 = df_src.copy()
         df2["_period"] = (
             df2[c["col_date"]]
             - pd.to_timedelta(df2[c["col_date"]].dt.dayofweek, unit="D")
         )
     elif granularity == "Jährlich":
-        df2 = df_src.copy()
         df2["_period"] = df2[c["col_date"]].dt.to_period("Y").dt.to_timestamp()
     else:
-        df2 = df_src.copy()
         df2["_period"] = df2["_monat_dt"]
     grp = df2.groupby(["_period", "_typ"])["_betrag_abs"].sum().reset_index()
     gp  = grp.pivot_table(
@@ -216,21 +201,36 @@ def group_by_period(df_src: pd.DataFrame, granularity: str) -> pd.DataFrame:
     return gp
 
 
+mw_filtered = build_mw(df)
+mw_all_t    = build_mw(df_all_today)
+
+df_inc_total   = df_all_today[df_all_today["_typ"] == "Einnahme"]
+df_exp_total   = df_all_today[df_all_today["_typ"] == "Ausgabe"]
+n_months_total = max(df_all_today["_monat_dt"].nunique(), 1)
+inc_total      = df_inc_total["_betrag_abs"].sum()
+exp_total      = df_exp_total["_betrag_abs"].sum()
+sav_total      = inc_total - exp_total
+rate_total     = (sav_total / inc_total * 100) if inc_total > 0 else 0
+
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2 = st.tabs(["\U0001f4ca Analyse", "\U0001f4c8 Sparquoten"])
+tab1, tab2, tab3 = st.tabs([
+    "\U0001f4ca Analyse",
+    "\U0001f4c8 Sparquoten",
+    "\U0001f4c5 Monatsübersicht",
+])
 
+# ══════════════════════════════════════════════
 with tab1:
 
-    # ── Gesamt-Toggle (steuert alle Objekte in diesem Tab) ──
     hdr_c, tog_c = st.columns([4, 1])
     with hdr_c:
         st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
     with tog_c:
         show_total = st.toggle(
             "Gesamt", value=False,
-            help="Alle Aufzeichnungen von Start bis heute — ignoriert Filter",
+            help="Alle Aufzeichnungen von Start bis heute — ignoriert Zeitraum- und Kategoriefilter",
         )
 
     df_d     = df_all_today if show_total else df
@@ -327,8 +327,7 @@ with tab1:
     )
     cat_df = (
         df_exp_d.groupby(c["col_category"])["_betrag_abs"]
-        .sum()
-        .reset_index()
+        .sum().reset_index()
         .sort_values("_betrag_abs", ascending=True)
     )
     if len(cat_df):
@@ -375,8 +374,9 @@ with tab1:
         "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
     st.plotly_chart(fig4, use_container_width=True)
 
-# ── Tab 2: Sparquoten ──────────────────────────────────────────────────
+# ══════════════════════════════════════════════
 with tab2:
+
     avg_sq  = mw_filtered["Sparquote"].mean()
     sq_cls  = "positive" if avg_sq >= 0 else "negative"
     sq_sign = "+" if avg_sq >= 0 else ""
@@ -447,11 +447,72 @@ with tab2:
         "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
     st.plotly_chart(fig5, use_container_width=True)
 
+# ══════════════════════════════════════════════
+with tab3:
+
+    st.markdown(
+        "<div class='section-header'>Monatsübersicht – alle Monate seit Aufzeichnungsbeginn</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Immer auf Basis aller Daten (kein Datums-/Kategoriefilter)
+    inc_mo = (
+        df_all_today[df_all_today["_typ"] == "Einnahme"]
+        .groupby("_monat_dt")["_betrag_abs"].sum()
+    )
+    exp_mo = (
+        df_all_today[df_all_today["_typ"] == "Ausgabe"]
+        .groupby("_monat_dt")["_betrag_abs"].sum()
+    )
+
+    first_month   = df_all_today["_monat_dt"].min()
+    current_month = today.to_period("M").to_timestamp()
+    all_months_idx = pd.date_range(start=first_month, end=current_month, freq="MS")
+
+    tbl = pd.DataFrame(index=all_months_idx)
+    tbl["Einnahmen"] = inc_mo.reindex(tbl.index, fill_value=0)
+    tbl["Ausgaben"]  = exp_mo.reindex(tbl.index, fill_value=0)
+    tbl["Sparmenge"] = tbl["Einnahmen"] - tbl["Ausgaben"]
+    tbl["Vermögen"]  = STARTING_WEALTH + tbl["Sparmenge"].cumsum()
+
+    # Gleitende Durchschnitte (auf chronologisch aufsteigender Reihe berechnen)
+    tbl["ø Gesamt"]    = tbl["Sparmenge"].expanding().mean()
+    tbl["ø 3 Monate"]  = tbl["Sparmenge"].rolling(window=3,  min_periods=1).mean()
+    tbl["ø 6 Monate"]  = tbl["Sparmenge"].rolling(window=6,  min_periods=1).mean()
+    tbl["ø 12 Monate"] = tbl["Sparmenge"].rolling(window=12, min_periods=3).mean()
+
+    tbl.index = tbl.index.strftime("%b %Y")
+    tbl = tbl.reset_index().rename(columns={"index": "Monat"})
+    tbl = tbl.iloc[::-1].reset_index(drop=True)   # neueste zuerst
+
+    euro_fmt = "%.0f €"
+    st.dataframe(
+        tbl,
+        use_container_width=True,
+        height=min(600, 36 + len(tbl) * 35),
+        column_config={
+            "Monat":       st.column_config.TextColumn("Monat", width="small"),
+            "Einnahmen":   st.column_config.NumberColumn("Einnahmen",   format=euro_fmt),
+            "Ausgaben":    st.column_config.NumberColumn("Ausgaben",    format=euro_fmt),
+            "Sparmenge":   st.column_config.NumberColumn("Sparmenge",   format=euro_fmt),
+            "Vermögen":    st.column_config.NumberColumn("Vermögen",    format=euro_fmt),
+            "ø Gesamt":    st.column_config.NumberColumn("ø Gesamt",    format=euro_fmt,
+                           help="Ø Sparmenge pro Monat seit Aufzeichnungsbeginn (kumulativ)"),
+            "ø 3 Monate":  st.column_config.NumberColumn("ø 3M",        format=euro_fmt,
+                           help="Ø Sparmenge der letzten 3 Monate"),
+            "ø 6 Monate":  st.column_config.NumberColumn("ø 6M",        format=euro_fmt,
+                           help="Ø Sparmenge der letzten 6 Monate"),
+            "ø 12 Monate": st.column_config.NumberColumn("ø 12M",       format=euro_fmt,
+                           help="Ø Sparmenge der letzten 12 Monate (min. 3 Monate Daten)"),
+        },
+    )
+
 # ─────────────────────────────────────────────
-# BUDGET-EXPANDER (zwischen Tabs und Tabelle)
+# BUDGET-EXPANDER
 # ─────────────────────────────────────────────
 avg_by_cat       = (df_exp.groupby(c["col_category"])["_betrag_abs"].sum() / n_months).to_dict()
-cats_with_budget = [cat for cat in sorted(avg_by_cat) if st.session_state.get(f"budget_{cat}", 0) > 0]
+cats_with_budget = [cat for cat in sorted(avg_by_cat)
+                    if st.session_state.get(f"budget_{cat}", 0) > 0]
 
 with st.expander("💰 Budgetvergleich (ø Monat vs. Ziel)", expanded=False):
     b_bars, b_edit = st.columns([3, 1])
@@ -494,7 +555,7 @@ with st.expander("💰 Budgetvergleich (ø Monat vs. Ziel)", expanded=False):
             )
 
 # ─────────────────────────────────────────────
-# TRANSAKTIONS-TABELLE (außerhalb der Tabs)
+# TRANSAKTIONS-TABELLE
 # ─────────────────────────────────────────────
 with st.expander(f"\U0001f4cb Alle Transaktionen ({len(df):,})", expanded=False):
     show_cols = [c["col_date"], c["col_description"], c["col_category"], c["col_amount"]]

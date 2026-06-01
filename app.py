@@ -325,8 +325,8 @@ with col_l:
         text=cat_df["_betrag_abs"].apply(lambda x: f"{x:,.0f} €"),
         textposition="outside", textfont=dict(color="#9a9ab0", size=11),
     ))
-    fig2.update_layout(**PLOT_CFG, height=380,
-        xaxis=dict(visible=False), yaxis=dict(gridcolor="rgba(0,0,0,0)", linecolor="rgba(0,0,0,0)"))
+    fig2.update_layout(**{**PLOT_CFG, "height": 380,
+        "xaxis": dict(visible=False), "yaxis": dict(gridcolor="rgba(0,0,0,0)", linecolor="rgba(0,0,0,0)")})
     st.plotly_chart(fig2, use_container_width=True)
 
 with col_r:
@@ -339,8 +339,8 @@ with col_r:
         textposition="outside", textfont=dict(color="#9a9ab0", size=10),
     ))
     fig3.add_hline(y=0, line_color="#4a4a6a", line_width=1)
-    fig3.update_layout(**PLOT_CFG, height=380,
-        yaxis=dict(ticksuffix="%", gridcolor="#2a2a35", linecolor="#2a2a35"))
+    fig3.update_layout(**{**PLOT_CFG, "height": 380,
+        "yaxis": dict(ticksuffix="%", gridcolor="#2a2a35", linecolor="#2a2a35")})
     st.plotly_chart(fig3, use_container_width=True)
 
 # ─────────────────────────────────────────────
@@ -360,8 +360,8 @@ fig4.add_trace(go.Scatter(
     line=dict(color=C["savings"], width=2.5),
 ))
 fig4.add_hline(y=0, line_color="#4a4a6a", line_width=1, line_dash="dot")
-fig4.update_layout(**PLOT_CFG, height=260,
-    yaxis=dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35"))
+fig4.update_layout(**{**PLOT_CFG, "height": 260,
+    "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
 st.plotly_chart(fig4, use_container_width=True)
 
 # ─────────────────────────────────────────────

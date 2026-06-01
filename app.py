@@ -272,20 +272,8 @@ def group_by_period(df_src: pd.DataFrame, granularity: str) -> pd.DataFrame:
     return gp
 
 
-mw_filtered = build_mw(df)
-mw_all_t    = build_mw(df_all_today)
-
-# Nur abgelaufene Monate für Sparquoten-Tab
+mw_filtered  = build_mw(df)
 mw_comp_filt = mw_filtered[mw_filtered["_monat_dt"] < current_month_start].copy()
-mw_comp_all  = mw_all_t[mw_all_t["_monat_dt"] < current_month_start].copy()
-
-df_inc_total   = df_all_today[df_all_today["_typ"] == "Einnahme"]
-df_exp_total   = df_all_today[df_all_today["_typ"] == "Ausgabe"]
-n_months_total = max(df_all_today["_monat_dt"].nunique(), 1)
-inc_total      = df_inc_total["_betrag_abs"].sum()
-exp_total      = df_exp_total["_betrag_abs"].sum()
-sav_total      = inc_total - exp_total
-rate_total     = (sav_total / inc_total * 100) if inc_total > 0 else 0
 
 
 def _style_map(styler, func, subset):
@@ -307,29 +295,9 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ══════════════════════════════════════════════
 with tab1:
 
-    hdr_c, tog_c = st.columns([4, 1])
-    with hdr_c:
-        st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
-    with tog_c:
-        show_total = st.toggle(
-            "Gesamt", value=False,
-            help="Alle Aufzeichnungen Start–heute — ignoriert Zeitraum & Kategoriefilter",
-        )
+    st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
 
-    df_d     = df_all_today if show_total else df
-    df_inc_d = df_d[df_d["_typ"] == "Einnahme"]
-    df_exp_d = df_d[df_d["_typ"] == "Ausgabe"]
-    n_mo_d   = max(df_d["_monat_dt"].nunique(), 1)
-    mw_d     = mw_all_t if show_total else mw_filtered
-
-    if show_total:
-        kpi_inc, kpi_exp, kpi_sav = inc_total, exp_total, sav_total
-        kpi_rate, kpi_n           = rate_total, n_months_total
-        kpi_ctx = f"Start – {today.strftime('%d.%m.%Y')}"
-    else:
-        kpi_inc, kpi_exp, kpi_sav = total_income, total_expense, total_savings
-        kpi_rate, kpi_n           = savings_rate, n_months
-        kpi_ctx = f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
+    kpi_ctx = f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
 
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -340,30 +308,30 @@ with tab1:
             <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
         </div>""", unsafe_allow_html=True)
     with col2:
-        cls  = "positive" if kpi_sav >= 0 else "negative"
-        sign = "+" if kpi_sav >= 0 else "−"
+        cls  = "positive" if total_savings >= 0 else "negative"
+        sign = "+" if total_savings >= 0 else "−"
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Gewinn</div>
-            <div class='metric-value {cls}'>{sign}{abs(kpi_sav):,.0f} €</div>
-            <div class='metric-delta'>ø {kpi_sav/kpi_n:,.0f} €/Monat</div>
+            <div class='metric-value {cls}'>{sign}{abs(total_savings):,.0f} €</div>
+            <div class='metric-delta'>ø {total_savings/n_months:,.0f} €/Monat</div>
         </div>""", unsafe_allow_html=True)
     with col3:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Zeitraum</div>
-            <div class='metric-value neutral'>{kpi_n} Mo.</div>
+            <div class='metric-value neutral'>{n_months} Mo.</div>
             <div class='metric-delta'>{kpi_ctx}</div>
         </div>""", unsafe_allow_html=True)
     with col4:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Einnahmen</div>
-            <div class='metric-value positive'>+{kpi_inc:,.0f} €</div>
-            <div class='metric-delta'>ø {kpi_inc/kpi_n:,.0f} €/Monat</div>
+            <div class='metric-value positive'>+{total_income:,.0f} €</div>
+            <div class='metric-delta'>ø {total_income/n_months:,.0f} €/Monat</div>
         </div>""", unsafe_allow_html=True)
     with col5:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Ausgaben</div>
-            <div class='metric-value negative'>−{kpi_exp:,.0f} €</div>
-            <div class='metric-delta'>ø {kpi_exp/kpi_n:,.0f} €/Monat</div>
+            <div class='metric-value negative'>−{total_expense:,.0f} €</div>
+            <div class='metric-delta'>ø {total_expense/n_months:,.0f} €/Monat</div>
         </div>""", unsafe_allow_html=True)
 
     # Einnahmen vs. Ausgaben
@@ -379,7 +347,7 @@ with tab1:
             index=1, horizontal=True, label_visibility="collapsed", key="gran_ev",
         )
 
-    gp = group_by_period(df_d, granularity)
+    gp = group_by_period(df, granularity)
     fig_ev = go.Figure()
     fig_ev.add_trace(go.Bar(
         x=gp["_period"], y=gp["Einnahme"], name="Einnahmen",
@@ -402,13 +370,9 @@ with tab1:
         "<div class='section-header'>Vermögensverlauf</div>",
         unsafe_allow_html=True,
     )
-    if show_total:
-        df_s = df_all_today.sort_values(c["col_date"]).copy()
-        df_s["_vermoegen"] = STARTING_WEALTH + df_s[c["col_amount"]].cumsum()
-    else:
-        prior_sum = df_all[df_all[c["col_date"]] < start_dt][c["col_amount"]].sum()
-        df_s = df.sort_values(c["col_date"]).copy()
-        df_s["_vermoegen"] = (STARTING_WEALTH + prior_sum) + df_s[c["col_amount"]].cumsum()
+    prior_sum = df_all[df_all[c["col_date"]] < start_dt][c["col_amount"]].sum()
+    df_s = df.sort_values(c["col_date"]).copy()
+    df_s["_vermoegen"] = (STARTING_WEALTH + prior_sum) + df_s[c["col_amount"]].cumsum()
 
     fig4 = go.Figure()
     fig4.add_trace(go.Scatter(
@@ -423,8 +387,91 @@ with tab1:
         "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
     st.plotly_chart(fig4, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
+    # ── Highlights ────────────────────────────
+    st.markdown(
+        "<div class='section-header'>Highlights</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Größte Einzelausgabe
+    if len(df_exp):
+        idx_mx      = df_exp["_betrag_abs"].idxmax()
+        max_exp_val = df_exp.loc[idx_mx, "_betrag_abs"]
+        max_exp_kat = df_exp.loc[idx_mx, c["col_category"]]
+        max_exp_dt  = df_exp.loc[idx_mx, c["col_date"]].strftime("%d.%m.%Y")
+    else:
+        max_exp_val, max_exp_kat, max_exp_dt = 0.0, "–", "–"
+
+    # Häufigste Ausgabe-Kategorie
+    if len(df_exp):
+        top_kat     = df_exp[c["col_category"]].value_counts().index[0]
+        top_kat_cnt = int(df_exp[c["col_category"]].value_counts().iloc[0])
+    else:
+        top_kat, top_kat_cnt = "–", 0
+
+    # Ausgaben laufender Monat vs. Ø Vormonate
+    curr_mo_exp  = df_exp[df_exp["_monat_dt"] == current_month_start]["_betrag_abs"].sum()
+    prev_mo_exps = (df_exp[df_exp["_monat_dt"] < current_month_start]
+                    .groupby("_monat_dt")["_betrag_abs"].sum())
+    avg_prev_exp = prev_mo_exps.mean() if len(prev_mo_exps) else curr_mo_exp
+    trend_delta  = curr_mo_exp - avg_prev_exp
+
+    # Ø Sparquote abgeschlossene Monate
+    avg_sq_hl = mw_comp_filt["Sparquote"].mean() if len(mw_comp_filt) else 0
+
+    h1, h2, h3, h4 = st.columns(4)
+    with h1:
+        st.metric(
+            "Größte Einzelausgabe",
+            f"{max_exp_val:,.0f} €",
+            delta=f"{max_exp_kat}  ·  {max_exp_dt}",
+            delta_color="off",
+            help="Höchster Einzelbetrag einer Ausgabetransaktion im gewählten Zeitraum.",
+        )
+    with h2:
+        st.metric(
+            "Häufigste Kategorie",
+            top_kat,
+            delta=f"{top_kat_cnt} Buchungen",
+            delta_color="off",
+            help="Ausgabe-Kategorie mit den meisten Einzelbuchungen im gewählten Zeitraum.",
+        )
+    with h3:
+        st.metric(
+            "Ø Sparquote (abgeschl. Monate)",
+            f"{avg_sq_hl:+.1f} %",
+            help=(
+                "Durchschnittliche Sparquote über alle abgeschlossenen Monate im Zeitraum. "
+                "Formel: (Einnahmen − Ausgaben) / Einnahmen × 100. "
+                "Der laufende Monat wird ausgeschlossen, da er noch nicht vollständig ist."
+            ),
+        )
+    with h4:
+        st.metric(
+            "Ausgaben akt. Monat",
+            f"{curr_mo_exp:,.0f} €",
+            delta=f"{trend_delta:+,.0f} € ggü. Ø Vormonat",
+            delta_color="inverse",
+            help=(
+                "Ausgaben im laufenden Monat. "
+                "Der Delta-Wert zeigt die Abweichung vom Durchschnitt der Vormonate im Zeitraum — "
+                "grün bedeutet weniger als üblich ausgegeben, rot mehr."
+            ),
+        )
+
 # ══════════════════════════════════════════════
 with tab2:
+    with st.expander("ℹ️ Was ist die Sparquote?"):
+        st.markdown(
+            "Die **Sparquote** gibt an, welcher Anteil der Einnahmen gespart wurde — "
+            "also nicht für Ausgaben verwendet wurde.\n\n"
+            "**Formel:** (Einnahmen − Ausgaben) / Einnahmen × 100\n\n"
+            "Eine Sparquote von **20 %** bedeutet: von 100 € Einnahmen wurden 20 € gespart "
+            "und 80 € ausgegeben.\n\n"
+            "**Hinweis:** Hier werden ausschließlich **abgeschlossene Monate** ausgewertet. "
+            "Der laufende Monat wird weggelassen, da unvollständige Daten die Quote verzerren würden."
+        )
+
     # Nur abgelaufene Monate
     mw2 = mw_comp_filt
 
@@ -669,6 +716,9 @@ with tab4:
 avg_by_cat       = (df_exp.groupby(c["col_category"])["_betrag_abs"].sum() / n_months).to_dict()
 cats_with_budget = [cat for cat in sorted(avg_by_cat)
                     if st.session_state.get(f"budget_{cat}", 0) > 0]
+
+st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+st.markdown("---")
 
 with st.expander("💰 Budgetvergleich (ø Monat vs. Ziel)", expanded=False):
     b_bars, b_edit = st.columns([3, 1])

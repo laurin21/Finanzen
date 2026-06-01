@@ -111,14 +111,28 @@ st.markdown(
     "color:#6b6b8a;font-family:DM Mono,monospace;margin-bottom:6px'>Analysezeitraum</div>",
     unsafe_allow_html=True,
 )
-date_range = st.date_input(
-    "Zeitraum",
-    value=(min_date, today.date()),
-    min_value=min_date,
-    max_value=max_date,
-    format="DD.MM.YYYY",
-    label_visibility="collapsed",
+_PRESETS = [
+    "Ganzer Zeitraum",
+    "Aktuelles Jahr",
+    "Letztes Jahr",
+    "Letzte 12 Monate",
+    "Letzte 6 Monate",
+    "Letzte 3 Monate",
+    "Benutzerdefiniert",
+]
+zeitraum_preset = st.selectbox(
+    "Zeitraum", _PRESETS, index=0, label_visibility="collapsed",
 )
+date_range = None
+if zeitraum_preset == "Benutzerdefiniert":
+    date_range = st.date_input(
+        "Benutzerdefinierter Zeitraum",
+        value=(min_date, today.date()),
+        min_value=min_date,
+        max_value=max_date,
+        format="DD.MM.YYYY",
+        label_visibility="collapsed",
+    )
 
 st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
 
@@ -178,12 +192,25 @@ if False:
 # ─────────────────────────────────────────────
 df_all_today = df_all[df_all[c["col_date"]] <= today]
 
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    start_dt = pd.Timestamp(date_range[0])
-    end_dt   = pd.Timestamp(date_range[1])
-else:
-    start_dt = pd.Timestamp(min_date)
-    end_dt   = today
+if zeitraum_preset == "Ganzer Zeitraum":
+    start_dt, end_dt = pd.Timestamp(min_date), today
+elif zeitraum_preset == "Aktuelles Jahr":
+    start_dt, end_dt = pd.Timestamp(today.year, 1, 1), today
+elif zeitraum_preset == "Letztes Jahr":
+    start_dt = pd.Timestamp(today.year - 1, 1, 1)
+    end_dt   = pd.Timestamp(today.year - 1, 12, 31)
+elif zeitraum_preset == "Letzte 12 Monate":
+    start_dt, end_dt = today - pd.DateOffset(months=12), today
+elif zeitraum_preset == "Letzte 6 Monate":
+    start_dt, end_dt = today - pd.DateOffset(months=6), today
+elif zeitraum_preset == "Letzte 3 Monate":
+    start_dt, end_dt = today - pd.DateOffset(months=3), today
+else:  # Benutzerdefiniert
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        start_dt = pd.Timestamp(date_range[0])
+        end_dt   = pd.Timestamp(date_range[1])
+    else:
+        start_dt, end_dt = pd.Timestamp(min_date), today
 
 df = df_all[(df_all[c["col_date"]] >= start_dt) & (df_all[c["col_date"]] <= end_dt)].copy()
 if sel_cats:
@@ -306,18 +333,13 @@ with tab1:
 
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
+        wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
         st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Einnahmen</div>
-            <div class='metric-value positive'>+{kpi_inc:,.0f} €</div>
-            <div class='metric-delta'>ø {kpi_inc/kpi_n:,.0f} €/Monat</div>
+            <div class='metric-label'>Aktuelles Vermögen</div>
+            <div class='metric-value {wcls}'>{current_wealth:,.0f} €</div>
+            <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
         </div>""", unsafe_allow_html=True)
     with col2:
-        st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Ausgaben</div>
-            <div class='metric-value negative'>−{kpi_exp:,.0f} €</div>
-            <div class='metric-delta'>ø {kpi_exp/kpi_n:,.0f} €/Monat</div>
-        </div>""", unsafe_allow_html=True)
-    with col3:
         cls  = "positive" if kpi_sav >= 0 else "negative"
         sign = "+" if kpi_sav >= 0 else "−"
         st.markdown(f"""<div class='metric-card'>
@@ -325,18 +347,23 @@ with tab1:
             <div class='metric-value {cls}'>{sign}{abs(kpi_sav):,.0f} €</div>
             <div class='metric-delta'>Sparquote {kpi_rate:.1f} %</div>
         </div>""", unsafe_allow_html=True)
-    with col4:
+    with col3:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Zeitraum</div>
             <div class='metric-value neutral'>{kpi_n} Mo.</div>
             <div class='metric-delta'>{kpi_ctx}</div>
         </div>""", unsafe_allow_html=True)
-    with col5:
-        wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
+    with col4:
         st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Aktuelles Vermögen</div>
-            <div class='metric-value {wcls}'>{current_wealth:,.0f} €</div>
-            <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
+            <div class='metric-label'>Einnahmen</div>
+            <div class='metric-value positive'>+{kpi_inc:,.0f} €</div>
+            <div class='metric-delta'>ø {kpi_inc/kpi_n:,.0f} €/Monat</div>
+        </div>""", unsafe_allow_html=True)
+    with col5:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ausgaben</div>
+            <div class='metric-value negative'>−{kpi_exp:,.0f} €</div>
+            <div class='metric-delta'>ø {kpi_exp/kpi_n:,.0f} €/Monat</div>
         </div>""", unsafe_allow_html=True)
 
     # Einnahmen vs. Ausgaben
@@ -368,7 +395,7 @@ with tab1:
         line=dict(color=C["savings"], width=2.5), marker=dict(size=5),
     ))
     fig_ev.update_layout(**PLOT_CFG, barmode="group", height=330)
-    st.plotly_chart(fig_ev, use_container_width=True)
+    st.plotly_chart(fig_ev, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
     # Vermögensverlauf
     st.markdown(
@@ -394,7 +421,7 @@ with tab1:
     fig4.add_hline(y=0, line_color="#4a4a6a", line_width=1, line_dash="dot")
     fig4.update_layout(**{**PLOT_CFG, "height": 280,
         "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
-    st.plotly_chart(fig4, use_container_width=True)
+    st.plotly_chart(fig4, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
 # ══════════════════════════════════════════════
 with tab2:
@@ -456,7 +483,7 @@ with tab2:
     fig3.add_hline(y=0, line_color="#4a4a6a", line_width=1)
     fig3.update_layout(**{**PLOT_CFG, "height": 300,
         "yaxis": dict(ticksuffix="%", gridcolor="#2a2a35", linecolor="#2a2a35")})
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
     st.markdown(
         "<div class='section-header'>Monatliches Erspartes</div>",
@@ -472,7 +499,7 @@ with tab2:
     fig5.add_hline(y=0, line_color="#4a4a6a", line_width=1)
     fig5.update_layout(**{**PLOT_CFG, "height": 280,
         "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
-    st.plotly_chart(fig5, use_container_width=True)
+    st.plotly_chart(fig5, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
 # ══════════════════════════════════════════════
 with tab3:
@@ -602,8 +629,8 @@ with tab4:
                  height=min(400, 36 + len(exp_stats) * 35))
 
     fig_exp_stack, exp_monthly = _stacked_chart(df_exp, c["col_category"], "expense")
-    st.plotly_chart(fig_exp_stack, use_container_width=True)
-    st.plotly_chart(_trend_chart(df_exp, exp_monthly), use_container_width=True)
+    st.plotly_chart(fig_exp_stack, use_container_width=True, config={"locale": "de", "displaylogo": False})
+    st.plotly_chart(_trend_chart(df_exp, exp_monthly), use_container_width=True, config={"locale": "de", "displaylogo": False})
 
     st.markdown("<div style='margin: 12px 0'></div>", unsafe_allow_html=True)
 
@@ -617,9 +644,9 @@ with tab4:
                  height=min(300, 36 + len(inc_stats) * 35))
 
     fig_inc_stack, inc_monthly = _stacked_chart(df_inc, c["col_category"], "income")
-    st.plotly_chart(fig_inc_stack, use_container_width=True)
+    st.plotly_chart(fig_inc_stack, use_container_width=True, config={"locale": "de", "displaylogo": False})
     if len(inc_stats) > 1:
-        st.plotly_chart(_trend_chart(df_inc, inc_monthly), use_container_width=True)
+        st.plotly_chart(_trend_chart(df_inc, inc_monthly), use_container_width=True, config={"locale": "de", "displaylogo": False})
 
 # ─────────────────────────────────────────────
 # BUDGET-EXPANDER

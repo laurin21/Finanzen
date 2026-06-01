@@ -232,7 +232,7 @@ savings_rate   = (total_savings / total_income * 100) if total_income > 0 else 0
 st.markdown("# Finanzanalyse")
 date_min = df[c["col_date"]].min().strftime("%d.%m.%Y") if len(df) else "–"
 date_max = df[c["col_date"]].max().strftime("%d.%m.%Y") if len(df) else "–"
-active_desc = f" · Filter: „{desc_search}"" if desc_search.strip() else ""
+active_desc = f" · Filter: „{desc_search}“" if desc_search.strip() else ""
 st.markdown(
     f"<div style='color:#6b6b8a;font-size:13px;font-family:DM Mono,monospace;margin-bottom:28px'>"
     f"{date_min} – {date_max} · {len(df):,} Transaktionen{active_desc}</div>",

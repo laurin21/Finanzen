@@ -771,16 +771,18 @@ with st.expander(f"\U0001f4cb Alle Transaktionen ({len(df):,})", expanded=False)
     st.dataframe(styled_disp, use_container_width=True, height=420)
 
 # ─────────────────────────────────────────────
-# TRANSAKTION BEARBEITEN / LÖSCHEN — deaktiviert
-# ─────────────────────────────────────────────
-# ─────────────────────────────────────────────
 # DATENPUNKTE VERWALTEN
 # ─────────────────────────────────────────────
-with st.expander("✏️ Datenpunkte verwalten", expanded=False):
+_mgmt_expanded = st.session_state.pop("_mgmt_open", False)
+with st.expander("✏️ Datenpunkte verwalten", expanded=_mgmt_expanded):
     mgmt_new, mgmt_edit = st.tabs(["➕ Neue Transaktion", "✏️ Bearbeiten / Löschen"])
 
     # ── Tab: Neue Transaktion ──────────────────
     with mgmt_new:
+        if "new_tx_msg" in st.session_state:
+            lvl, txt = st.session_state.pop("new_tx_msg")
+            (st.success if lvl == "ok" else st.error)(txt)
+
         with st.form("new_tx", clear_on_submit=True):
             fi1, fi2, fi3, fi4 = st.columns([1, 1, 1, 2])
             with fi1:
@@ -807,7 +809,7 @@ with st.expander("✏️ Datenpunkte verwalten", expanded=False):
             if submitted:
                 kat = inp_kat_neu.strip() if inp_kat_sel == "✏️ Neue Kategorie…" else inp_kat_sel
                 if not kat:
-                    st.error("Bitte eine Kategorie angeben.")
+                    st.session_state["new_tx_msg"] = ("err", "Bitte eine Kategorie angeben.")
                 else:
                     try:
                         append_transaction(
@@ -817,12 +819,18 @@ with st.expander("✏️ Datenpunkte verwalten", expanded=False):
                         msg = f"✓  {inp_date.strftime('%d.%m.%Y')}  ·  {inp_betrag:+.2f} €  ·  {kat}"
                         if inp_desc.strip():
                             msg += f"  ·  {inp_desc.strip()}"
-                        st.success(msg)
+                        st.session_state["new_tx_msg"] = ("ok", msg)
                     except Exception as ex:
-                        st.error(f"Fehler beim Speichern: {ex}")
+                        st.session_state["new_tx_msg"] = ("err", f"Fehler beim Speichern: {ex}")
+                st.session_state["_mgmt_open"] = True
+                st.rerun()
 
     # ── Tab: Bearbeiten / Löschen ──────────────
     with mgmt_edit:
+        if "edit_tx_msg" in st.session_state:
+            lvl, txt = st.session_state.pop("edit_tx_msg")
+            (st.success if lvl == "ok" else st.error)(txt)
+
         ed1, ed2, ed3 = st.columns([1, 1, 1])
         with ed1:
             ed_start = st.date_input(
@@ -901,17 +909,21 @@ with st.expander("✏️ Datenpunkte verwalten", expanded=False):
                             edit_betrag, edit_kat, edit_desc.strip(),
                         )
                         st.cache_data.clear()
-                        st.success("✓ Aktualisiert. Seite neu laden für aktuelle Daten.")
+                        st.session_state["edit_tx_msg"] = ("ok", "✓ Transaktion aktualisiert.")
                     except Exception as ex:
-                        st.error(f"Fehler: {ex}")
+                        st.session_state["edit_tx_msg"] = ("err", f"Fehler: {ex}")
+                    st.session_state["_mgmt_open"] = True
+                    st.rerun()
 
                 if del_ok:
                     if not confirm_del:
-                        st.error("Bitte Löschen per Checkbox bestätigen.")
+                        st.session_state["edit_tx_msg"] = ("err", "Bitte Löschen per Checkbox bestätigen.")
                     else:
                         try:
                             delete_transaction(sel_sr)
                             st.cache_data.clear()
-                            st.success("✓ Gelöscht. Seite neu laden für aktuelle Daten.")
+                            st.session_state["edit_tx_msg"] = ("ok", "✓ Transaktion gelöscht.")
                         except Exception as ex:
-                            st.error(f"Fehler: {ex}")
+                            st.session_state["edit_tx_msg"] = ("err", f"Fehler: {ex}")
+                    st.session_state["_mgmt_open"] = True
+                    st.rerun()

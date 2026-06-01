@@ -343,9 +343,9 @@ with tab1:
         cls  = "positive" if kpi_sav >= 0 else "negative"
         sign = "+" if kpi_sav >= 0 else "−"
         st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Erspartes</div>
+            <div class='metric-label'>Gewinn</div>
             <div class='metric-value {cls}'>{sign}{abs(kpi_sav):,.0f} €</div>
-            <div class='metric-delta'>Sparquote {kpi_rate:.1f} %</div>
+            <div class='metric-delta'>ø {kpi_sav/kpi_n:,.0f} €/Monat</div>
         </div>""", unsafe_allow_html=True)
     with col3:
         st.markdown(f"""<div class='metric-card'>
@@ -486,7 +486,7 @@ with tab2:
     st.plotly_chart(fig3, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
     st.markdown(
-        "<div class='section-header'>Monatliches Erspartes</div>",
+        "<div class='section-header'>Monatlicher Gewinn</div>",
         unsafe_allow_html=True,
     )
     bar_colors = [C["savings"] if v >= 0 else C["expense"] for v in mw2["Ersparnis"]]

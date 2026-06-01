@@ -137,57 +137,6 @@ if zeitraum_preset == "Benutzerdefiniert":
 st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# NEUE TRANSAKTION (inline) — deaktiviert
-# ─────────────────────────────────────────────
-if False:
-    st.markdown(
-        "<div style='font-size:11px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;"
-        "color:#6b6b8a;font-family:DM Mono,monospace;margin-bottom:6px'>Neue Transaktion</div>",
-        unsafe_allow_html=True,
-    )
-    with st.form("new_tx", clear_on_submit=True):
-        fi1, fi2, fi3, fi4 = st.columns([1, 1, 1, 2])
-        with fi1:
-            inp_date = st.date_input("Datum", value=today.date(), format="DD.MM.YYYY")
-        with fi2:
-            inp_betrag = st.number_input(
-                "Betrag (€)", value=0.0, step=0.01, format="%.2f",
-                help="Positiv = Einnahme · Negativ = Ausgabe",
-            )
-        with fi3:
-            inp_kat_sel = st.selectbox(
-                "Kategorie",
-                all_cats_by_freq + (["✏️ Neue Kategorie…"] if all_cats_by_freq else ["✏️ Neue Kategorie…"]),
-            )
-        with fi4:
-            inp_desc = st.text_input("Beschreibung", placeholder="z.B. REWE, Gehalt, Miete …")
-
-        if inp_kat_sel == "✏️ Neue Kategorie…":
-            inp_kat_neu = st.text_input("Neue Kategorie eingeben")
-        else:
-            inp_kat_neu = ""
-
-        submitted = st.form_submit_button("💾 Speichern", use_container_width=True)
-        if submitted:
-            kat = inp_kat_neu.strip() if inp_kat_sel == "✏️ Neue Kategorie…" else inp_kat_sel
-            if not kat:
-                st.error("Bitte eine Kategorie angeben.")
-            else:
-                try:
-                    append_transaction(
-                        inp_date.strftime("%d.%m.%Y"), inp_betrag, kat, inp_desc.strip()
-                    )
-                    st.cache_data.clear()
-                    msg = f"✓  {inp_date.strftime('%d.%m.%Y')}  ·  {inp_betrag:+.2f} €  ·  {kat}"
-                    if inp_desc.strip():
-                        msg += f"  ·  {inp_desc.strip()}"
-                    st.success(msg)
-                except Exception as ex:
-                    st.error(f"Fehler beim Speichern: {ex}")
-
-    st.markdown("---")
-
-# ─────────────────────────────────────────────
 # DATEN FILTERN
 # ─────────────────────────────────────────────
 df_all_today = df_all[df_all[c["col_date"]] <= today]
@@ -824,97 +773,145 @@ with st.expander(f"\U0001f4cb Alle Transaktionen ({len(df):,})", expanded=False)
 # ─────────────────────────────────────────────
 # TRANSAKTION BEARBEITEN / LÖSCHEN — deaktiviert
 # ─────────────────────────────────────────────
-if False:
- with st.expander("✏️ Transaktion bearbeiten / löschen", expanded=False):
-    ed1, ed2, ed3 = st.columns([1, 1, 1])
-    with ed1:
-        ed_start = st.date_input(
-            "Von", value=(today - pd.Timedelta(days=30)).date(),
-            min_value=min_date, max_value=max_date,
-            format="DD.MM.YYYY", key="ed_start",
-        )
-    with ed2:
-        ed_end = st.date_input(
-            "Bis", value=today.date(),
-            min_value=min_date, max_value=max_date,
-            format="DD.MM.YYYY", key="ed_end",
-        )
-    with ed3:
-        ed_kat = st.selectbox("Kategorie", ["Alle"] + all_cats, key="ed_kat")
+# ─────────────────────────────────────────────
+# DATENPUNKTE VERWALTEN
+# ─────────────────────────────────────────────
+with st.expander("✏️ Datenpunkte verwalten", expanded=False):
+    mgmt_new, mgmt_edit = st.tabs(["➕ Neue Transaktion", "✏️ Bearbeiten / Löschen"])
 
-    df_edit = df_all_today[
-        (df_all_today[c["col_date"]] >= pd.Timestamp(ed_start)) &
-        (df_all_today[c["col_date"]] <= pd.Timestamp(ed_end))
-    ].copy()
-    if ed_kat != "Alle":
-        df_edit = df_edit[df_edit[c["col_category"]] == ed_kat]
-    df_edit = df_edit.sort_values(c["col_date"], ascending=False)
-
-    if len(df_edit) == 0:
-        st.info("Keine Transaktionen im gewählten Bereich.")
-    else:
-        option_labels = [
-            f"{row[c['col_date']].strftime('%d.%m.%Y')}  ·  "
-            f"{row[c['col_amount']]:+.2f} €  ·  "
-            f"{row[c['col_category']]}  ·  {str(row[c['col_description']])[:40]}"
-            for _, row in df_edit.iterrows()
-        ]
-        sheet_rows = list(df_edit["_sheet_row"])
-        sel_label  = st.selectbox("Transaktion auswählen", option_labels, key="ed_sel")
-        sel_idx    = option_labels.index(sel_label)
-        sel_sr     = sheet_rows[sel_idx]
-        sel_row    = df_edit.iloc[sel_idx]
-
-        with st.form("edit_tx"):
-            ec1, ec2, ec3, ec4 = st.columns([1, 1, 1, 2])
-            with ec1:
-                edit_date = st.date_input(
-                    "Datum", value=sel_row[c["col_date"]].date(), format="DD.MM.YYYY",
+    # ── Tab: Neue Transaktion ──────────────────
+    with mgmt_new:
+        with st.form("new_tx", clear_on_submit=True):
+            fi1, fi2, fi3, fi4 = st.columns([1, 1, 1, 2])
+            with fi1:
+                inp_date = st.date_input("Datum", value=today.date(), format="DD.MM.YYYY")
+            with fi2:
+                inp_betrag = st.number_input(
+                    "Betrag (€)", value=0.0, step=0.01, format="%.2f",
+                    help="Positiv = Einnahme · Negativ = Ausgabe",
                 )
-            with ec2:
-                edit_betrag = st.number_input(
-                    "Betrag (€)", value=float(sel_row[c["col_amount"]]),
-                    step=0.01, format="%.2f",
+            with fi3:
+                inp_kat_sel = st.selectbox(
+                    "Kategorie",
+                    all_cats_by_freq + ["✏️ Neue Kategorie…"],
                 )
-            with ec3:
-                cur_kat = sel_row[c["col_category"]]
-                kat_opts = all_cats_by_freq + ([] if cur_kat in all_cats_by_freq else [cur_kat])
-                edit_kat = st.selectbox(
-                    "Kategorie", kat_opts,
-                    index=kat_opts.index(cur_kat) if cur_kat in kat_opts else 0,
-                )
-            with ec4:
-                edit_desc = st.text_input(
-                    "Beschreibung", value=str(sel_row[c["col_description"]]),
-                )
+            with fi4:
+                inp_desc = st.text_input("Beschreibung", placeholder="z.B. REWE, Gehalt, Miete …")
 
-            confirm_del = st.checkbox("⚠️ Löschen bestätigen")
-            btn_s, btn_d = st.columns(2)
-            with btn_s:
-                save_ok = st.form_submit_button("💾 Änderungen speichern",
-                                                use_container_width=True)
-            with btn_d:
-                del_ok = st.form_submit_button("🗑️ Löschen",
-                                               use_container_width=True, type="secondary")
+            if inp_kat_sel == "✏️ Neue Kategorie…":
+                inp_kat_neu = st.text_input("Neue Kategorie eingeben")
+            else:
+                inp_kat_neu = ""
 
-            if save_ok:
-                try:
-                    update_transaction(
-                        sel_sr, edit_date.strftime("%d.%m.%Y"),
-                        edit_betrag, edit_kat, edit_desc.strip(),
-                    )
-                    st.cache_data.clear()
-                    st.success("✓ Transaktion aktualisiert. Seite neu laden für aktuelle Daten.")
-                except Exception as ex:
-                    st.error(f"Fehler: {ex}")
-
-            if del_ok:
-                if not confirm_del:
-                    st.error("Bitte zuerst Löschen per Checkbox bestätigen.")
+            submitted = st.form_submit_button("💾 Speichern", use_container_width=True)
+            if submitted:
+                kat = inp_kat_neu.strip() if inp_kat_sel == "✏️ Neue Kategorie…" else inp_kat_sel
+                if not kat:
+                    st.error("Bitte eine Kategorie angeben.")
                 else:
                     try:
-                        delete_transaction(sel_sr)
+                        append_transaction(
+                            inp_date.strftime("%d.%m.%Y"), inp_betrag, kat, inp_desc.strip()
+                        )
                         st.cache_data.clear()
-                        st.success("✓ Transaktion gelöscht. Seite neu laden für aktuelle Daten.")
+                        msg = f"✓  {inp_date.strftime('%d.%m.%Y')}  ·  {inp_betrag:+.2f} €  ·  {kat}"
+                        if inp_desc.strip():
+                            msg += f"  ·  {inp_desc.strip()}"
+                        st.success(msg)
+                    except Exception as ex:
+                        st.error(f"Fehler beim Speichern: {ex}")
+
+    # ── Tab: Bearbeiten / Löschen ──────────────
+    with mgmt_edit:
+        ed1, ed2, ed3 = st.columns([1, 1, 1])
+        with ed1:
+            ed_start = st.date_input(
+                "Von", value=(today - pd.Timedelta(days=30)).date(),
+                min_value=min_date, max_value=max_date,
+                format="DD.MM.YYYY", key="ed_start",
+            )
+        with ed2:
+            ed_end = st.date_input(
+                "Bis", value=today.date(),
+                min_value=min_date, max_value=max_date,
+                format="DD.MM.YYYY", key="ed_end",
+            )
+        with ed3:
+            ed_kat = st.selectbox("Kategorie", ["Alle"] + all_cats, key="ed_kat")
+
+        df_edit = df_all_today[
+            (df_all_today[c["col_date"]] >= pd.Timestamp(ed_start)) &
+            (df_all_today[c["col_date"]] <= pd.Timestamp(ed_end))
+        ].copy()
+        if ed_kat != "Alle":
+            df_edit = df_edit[df_edit[c["col_category"]] == ed_kat]
+        df_edit = df_edit.sort_values(c["col_date"], ascending=False)
+
+        if len(df_edit) == 0:
+            st.info("Keine Transaktionen im gewählten Bereich.")
+        else:
+            option_labels = [
+                f"{row[c['col_date']].strftime('%d.%m.%Y')}  ·  "
+                f"{row[c['col_amount']]:+.2f} €  ·  "
+                f"{row[c['col_category']]}  ·  {str(row[c['col_description']])[:40]}"
+                for _, row in df_edit.iterrows()
+            ]
+            sheet_rows = list(df_edit["_sheet_row"])
+            sel_label  = st.selectbox("Transaktion auswählen", option_labels, key="ed_sel")
+            sel_idx    = option_labels.index(sel_label)
+            sel_sr     = sheet_rows[sel_idx]
+            sel_row    = df_edit.iloc[sel_idx]
+
+            with st.form("edit_tx"):
+                ec1, ec2, ec3, ec4 = st.columns([1, 1, 1, 2])
+                with ec1:
+                    edit_date = st.date_input(
+                        "Datum", value=sel_row[c["col_date"]].date(), format="DD.MM.YYYY",
+                    )
+                with ec2:
+                    edit_betrag = st.number_input(
+                        "Betrag (€)", value=float(sel_row[c["col_amount"]]),
+                        step=0.01, format="%.2f",
+                    )
+                with ec3:
+                    cur_kat  = sel_row[c["col_category"]]
+                    kat_opts = all_cats_by_freq + ([] if cur_kat in all_cats_by_freq else [cur_kat])
+                    edit_kat = st.selectbox(
+                        "Kategorie", kat_opts,
+                        index=kat_opts.index(cur_kat) if cur_kat in kat_opts else 0,
+                    )
+                with ec4:
+                    edit_desc = st.text_input(
+                        "Beschreibung", value=str(sel_row[c["col_description"]]),
+                    )
+
+                confirm_del = st.checkbox("⚠️ Löschen bestätigen")
+                btn_s, btn_d = st.columns(2)
+                with btn_s:
+                    save_ok = st.form_submit_button("💾 Änderungen speichern",
+                                                    use_container_width=True)
+                with btn_d:
+                    del_ok = st.form_submit_button("🗑️ Löschen",
+                                                   use_container_width=True, type="secondary")
+
+                if save_ok:
+                    try:
+                        update_transaction(
+                            sel_sr, edit_date.strftime("%d.%m.%Y"),
+                            edit_betrag, edit_kat, edit_desc.strip(),
+                        )
+                        st.cache_data.clear()
+                        st.success("✓ Aktualisiert. Seite neu laden für aktuelle Daten.")
                     except Exception as ex:
                         st.error(f"Fehler: {ex}")
+
+                if del_ok:
+                    if not confirm_del:
+                        st.error("Bitte Löschen per Checkbox bestätigen.")
+                    else:
+                        try:
+                            delete_transaction(sel_sr)
+                            st.cache_data.clear()
+                            st.success("✓ Gelöscht. Seite neu laden für aktuelle Daten.")
+                        except Exception as ex:
+                            st.error(f"Fehler: {ex}")

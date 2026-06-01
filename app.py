@@ -335,17 +335,14 @@ with tab_a:
         </div>""", unsafe_allow_html=True)
 
     # Einnahmen vs. Ausgaben
-    ev_hdr_c, ev_gran_c = st.columns([3, 1])
-    with ev_hdr_c:
-        st.markdown(
-            "<div class='section-header'>Einnahmen vs. Ausgaben</div>",
-            unsafe_allow_html=True,
-        )
-    with ev_gran_c:
-        granularity = st.radio(
-            "Granularität", ["Wöchentlich", "Monatlich", "Jährlich"],
-            index=1, horizontal=True, label_visibility="collapsed", key="gran_ev",
-        )
+    st.markdown(
+        "<div class='section-header'>Einnahmen vs. Ausgaben</div>",
+        unsafe_allow_html=True,
+    )
+    granularity = st.radio(
+        "Granularität", ["Wöchentlich", "Monatlich", "Jährlich"],
+        index=1, horizontal=True, label_visibility="collapsed", key="gran_ev",
+    )
 
     gp = group_by_period(df, granularity)
 

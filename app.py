@@ -169,50 +169,8 @@ if len(df) == 0:
     st.stop()
 
 # ─────────────────────────────────────────────
-# KPI-KARTEN (inkl. Vermögen)
+# VORBERECHNUNGEN (beide Tabs brauchen mw)
 # ─────────────────────────────────────────────
-st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
-col1, col2, col3, col4, col5 = st.columns(5)
-
-with col1:
-    st.markdown(f"""<div class='metric-card'>
-        <div class='metric-label'>Einnahmen gesamt</div>
-        <div class='metric-value positive'>+{total_income:,.0f} €</div>
-        <div class='metric-delta'>⌀ {total_income/n_months:,.0f} €/Monat</div>
-    </div>""", unsafe_allow_html=True)
-with col2:
-    st.markdown(f"""<div class='metric-card'>
-        <div class='metric-label'>Ausgaben gesamt</div>
-        <div class='metric-value negative'>−{total_expense:,.0f} €</div>
-        <div class='metric-delta'>⌀ {total_expense/n_months:,.0f} €/Monat</div>
-    </div>""", unsafe_allow_html=True)
-with col3:
-    cls  = "positive" if total_savings >= 0 else "negative"
-    sign = "+" if total_savings >= 0 else "−"
-    st.markdown(f"""<div class='metric-card'>
-        <div class='metric-label'>Erspartes gesamt</div>
-        <div class='metric-value {cls}'>{sign}{abs(total_savings):,.0f} €</div>
-        <div class='metric-delta'>Sparquote {savings_rate:.1f} %</div>
-    </div>""", unsafe_allow_html=True)
-with col4:
-    st.markdown(f"""<div class='metric-card'>
-        <div class='metric-label'>Zeitraum</div>
-        <div class='metric-value neutral'>{n_months} Mo.</div>
-        <div class='metric-delta'>{len(df):,} Transaktionen</div>
-    </div>""", unsafe_allow_html=True)
-with col5:
-    wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
-    st.markdown(f"""<div class='metric-card'>
-        <div class='metric-label'>Aktuelles Vermögen</div>
-        <div class='metric-value {wcls}'>{current_wealth:,.0f} €</div>
-        <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
-    </div>""", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────
-# EINNAHMEN VS. AUSGABEN ÜBER ZEIT
-# ─────────────────────────────────────────────
-st.markdown("<div class='section-header'>Einnahmen vs. Ausgaben</div>", unsafe_allow_html=True)
-
 monthly = (
     df.groupby(["_monat_dt", "_typ"])["_betrag_abs"]
     .sum().reset_index()
@@ -222,23 +180,89 @@ for col in ["Einnahme", "Ausgabe"]:
     if col not in mw.columns:
         mw[col] = 0
 mw["Ersparnis"] = mw["Einnahme"] - mw["Ausgabe"]
+mw["Sparquote"] = (mw["Ersparnis"] / mw["Einnahme"].replace(0, float("nan")) * 100).fillna(0)
 
-fig = go.Figure()
-fig.add_trace(go.Bar(x=mw["_monat_dt"], y=mw["Einnahme"], name="Einnahmen",
-    marker_color=C["income"], opacity=0.85))
-fig.add_trace(go.Bar(x=mw["_monat_dt"], y=mw["Ausgabe"], name="Ausgaben",
-    marker_color=C["expense"], opacity=0.85))
-fig.add_trace(go.Scatter(x=mw["_monat_dt"], y=mw["Ersparnis"], name="Ersparnis",
-    mode="lines+markers", line=dict(color=C["savings"], width=2.5), marker=dict(size=5)))
-fig.update_layout(**PLOT_CFG, barmode="group", height=330)
-st.plotly_chart(fig, use_container_width=True)
+# KPI-Werte Gesamt (Start bis heute, unabhängig vom Filter)
+df_inc_total   = df_all_today[df_all_today["_typ"] == "Einnahme"]
+df_exp_total   = df_all_today[df_all_today["_typ"] == "Ausgabe"]
+n_months_total = max(df_all_today["_monat_dt"].nunique(), 1)
+inc_total      = df_inc_total["_betrag_abs"].sum()
+exp_total      = df_exp_total["_betrag_abs"].sum()
+sav_total      = inc_total - exp_total
+rate_total     = (sav_total / inc_total * 100) if inc_total > 0 else 0
 
 # ─────────────────────────────────────────────
-# AUSGABEN NACH KATEGORIE + SPARQUOTE (kompakt)
+# TABS
 # ─────────────────────────────────────────────
-col_l, col_r = st.columns([3, 2])
+tab1, tab2 = st.tabs(["\U0001f4ca Analyse", "\U0001f4c8 Sparquoten"])
 
-with col_l:
+with tab1:
+
+    # ── KPI-KARTEN mit Toggle ──
+    hdr_col, tog_col = st.columns([4, 1])
+    with hdr_col:
+        st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
+    with tog_col:
+        show_total = st.toggle("Gesamt", value=False,
+                               help="Alle Aufzeichnungen von Start bis heute")
+
+    if show_total:
+        kpi_inc, kpi_exp, kpi_sav = inc_total, exp_total, sav_total
+        kpi_rate, kpi_n           = rate_total, n_months_total
+        kpi_ctx = f"Start – {today.strftime('%d.%m.%Y')}"
+    else:
+        kpi_inc, kpi_exp, kpi_sav = total_income, total_expense, total_savings
+        kpi_rate, kpi_n           = savings_rate, n_months
+        kpi_ctx = f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Einnahmen</div>
+            <div class='metric-value positive'>+{kpi_inc:,.0f} €</div>
+            <div class='metric-delta'>ø {kpi_inc/kpi_n:,.0f} €/Monat</div>
+        </div>""", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ausgaben</div>
+            <div class='metric-value negative'>−{kpi_exp:,.0f} €</div>
+            <div class='metric-delta'>ø {kpi_exp/kpi_n:,.0f} €/Monat</div>
+        </div>""", unsafe_allow_html=True)
+    with col3:
+        cls  = "positive" if kpi_sav >= 0 else "negative"
+        sign = "+" if kpi_sav >= 0 else "−"
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Erspartes</div>
+            <div class='metric-value {cls}'>{sign}{abs(kpi_sav):,.0f} €</div>
+            <div class='metric-delta'>Sparquote {kpi_rate:.1f} %</div>
+        </div>""", unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Zeitraum</div>
+            <div class='metric-value neutral'>{kpi_n} Mo.</div>
+            <div class='metric-delta'>{kpi_ctx}</div>
+        </div>""", unsafe_allow_html=True)
+    with col5:
+        wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Aktuelles Vermögen</div>
+            <div class='metric-value {wcls}'>{current_wealth:,.0f} €</div>
+            <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Einnahmen vs. Ausgaben ──
+    st.markdown("<div class='section-header'>Einnahmen vs. Ausgaben</div>", unsafe_allow_html=True)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=mw["_monat_dt"], y=mw["Einnahme"], name="Einnahmen",
+        marker_color=C["income"], opacity=0.85))
+    fig.add_trace(go.Bar(x=mw["_monat_dt"], y=mw["Ausgabe"], name="Ausgaben",
+        marker_color=C["expense"], opacity=0.85))
+    fig.add_trace(go.Scatter(x=mw["_monat_dt"], y=mw["Ersparnis"], name="Ersparnis",
+        mode="lines+markers", line=dict(color=C["savings"], width=2.5), marker=dict(size=5)))
+    fig.update_layout(**PLOT_CFG, barmode="group", height=330)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Ausgaben nach Kategorie ──
     st.markdown("<div class='section-header'>Ausgaben nach Kategorie</div>", unsafe_allow_html=True)
     cat_df = (
         df_exp.groupby(c["col_category"])["_betrag_abs"]
@@ -252,110 +276,133 @@ with col_l:
         text=cat_df["_betrag_abs"].apply(lambda x: f"{x:,.0f} €"),
         textposition="outside", textfont=dict(color="#9a9ab0", size=11),
     ))
-    fig2.update_layout(**{**PLOT_CFG, "height": 320,
+    fig2.update_layout(**{**PLOT_CFG, "height": max(200, len(cat_df) * 36),
         "xaxis": dict(visible=False),
         "yaxis": dict(gridcolor="rgba(0,0,0,0)", linecolor="rgba(0,0,0,0)")})
     st.plotly_chart(fig2, use_container_width=True)
 
-with col_r:
-    st.markdown("<div class='section-header'>Monatliche Sparquote</div>", unsafe_allow_html=True)
-    mw["Sparquote"] = (mw["Ersparnis"] / mw["Einnahme"].replace(0, float("nan")) * 100).fillna(0)
-    avg_sq  = mw["Sparquote"].mean()
-    sq_cls  = "positive" if avg_sq >= 0 else "negative"
-    sq_sign = "+" if avg_sq >= 0 else ""
-    st.markdown(f"""<div class='metric-card'>
-        <div class='metric-label'>Ø Sparquote im Zeitraum</div>
-        <div class='metric-value {sq_cls}'>{sq_sign}{avg_sq:.1f} %</div>
-        <div class='metric-delta'>
-            Min {mw["Sparquote"].min():.1f} % &nbsp;·&nbsp; Max {mw["Sparquote"].max():.1f} %
-        </div>
-    </div>""", unsafe_allow_html=True)
+    # ── Vermögensverlauf ──
+    st.markdown("<div class='section-header'>Vermögensverlauf</div>", unsafe_allow_html=True)
+    df_s = df.sort_values(c["col_date"]).copy()
+    df_s["_vermoegen"] = STARTING_WEALTH + df_s[c["col_amount"]].cumsum()
+    fig4 = go.Figure()
+    fig4.add_trace(go.Scatter(
+        x=df_s[c["col_date"]], y=df_s["_vermoegen"],
+        mode="lines", fill="tozeroy",
+        fillcolor="rgba(123,138,255,0.08)",
+        line=dict(color=C["savings"], width=2.5),
+        hovertemplate="%{x|%d.%m.%Y}: %{y:,.0f} €<extra></extra>",
+    ))
+    fig4.add_hline(y=0, line_color="#4a4a6a", line_width=1, line_dash="dot")
+    fig4.update_layout(**{**PLOT_CFG, "height": 280,
+        "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
+    st.plotly_chart(fig4, use_container_width=True)
+
+    # ── Budgetvergleich ──
+    st.markdown("<div class='section-header'>Budgetvergleich (ø Monat vs. Ziel)</div>", unsafe_allow_html=True)
+    avg_by_cat       = (df_exp.groupby(c["col_category"])["_betrag_abs"].sum() / n_months).to_dict()
+    cats_with_budget = [cat for cat in sorted(avg_by_cat)
+                        if st.session_state.get(f"budget_{cat}", 0) > 0]
+    if cats_with_budget:
+        bcols = st.columns(2)
+        for i, cat in enumerate(cats_with_budget):
+            actual      = avg_by_cat[cat]
+            budget      = st.session_state[f"budget_{cat}"]
+            pct         = min(actual / budget * 100, 100)
+            over        = actual > budget
+            bar_color   = C["expense"] if over else C["income"]
+            status_text = "↑ über Budget" if over else "✓ ok"
+            status      = f"<span style='color:{bar_color}'>{status_text}</span>"
+            with bcols[i % 2]:
+                st.markdown(f"""<div class='budget-bar-container'>
+                    <div class='budget-bar-label'>
+                        <span style='color:#c8c8e0;font-weight:500'>{cat}</span>
+                        <span style='color:#6b6b8a;font-family:DM Mono,monospace;font-size:12px'>
+                            {actual:,.0f} € / {budget:,.0f} € · {status}
+                        </span>
+                    </div>
+                    <div class='budget-bar-bg'>
+                        <div class='budget-bar-fill' style='width:{pct:.1f}%;background:{bar_color}'></div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+    else:
+        st.info("Budgets in der Seitenleiste unter **Budgets → ✏️ Anpassen** eintragen.")
+
+    # ── Transaktions-Tabelle ──
+    with st.expander(f"\U0001f4cb Alle Transaktionen ({len(df):,})", expanded=False):
+        show_cols = [c["col_date"], c["col_description"], c["col_category"], c["col_amount"]]
+        show_cols = [col for col in show_cols if col in df.columns]
+        disp      = df[show_cols].sort_values(c["col_date"], ascending=False).copy()
+        disp[c["col_date"]] = disp[c["col_date"]].dt.strftime("%d.%m.%Y")
+        st.dataframe(
+            disp.reset_index(drop=True),
+            use_container_width=True,
+            height=420,
+            column_config={
+                c["col_amount"]: st.column_config.NumberColumn(format="%.2f €"),
+                c["col_date"]:   st.column_config.TextColumn("Datum"),
+            }
+        )
+
+with tab2:
+
+    # ── KPI-Karten ──
+    avg_sq   = mw["Sparquote"].mean()
+    sq_cls   = "positive" if avg_sq >= 0 else "negative"
+    sq_sign  = "+" if avg_sq >= 0 else ""
+    last_sq  = mw["Sparquote"].iloc[-1] if len(mw) else 0
+    lsq_cls  = "positive" if last_sq >= 0 else "negative"
+    lsq_lbl  = mw["_monat_dt"].iloc[-1].strftime("%b %Y") if len(mw) else ""
+    pos_mo   = int((mw["Sparquote"] > 0).sum())
+
+    st.markdown("<div class='section-header'>Sparquoten-Übersicht</div>", unsafe_allow_html=True)
+    sq1, sq2, sq3 = st.columns(3)
+    with sq1:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>ø Sparquote im Zeitraum</div>
+            <div class='metric-value {sq_cls}'>{sq_sign}{avg_sq:.1f} %</div>
+            <div class='metric-delta'>Min {mw["Sparquote"].min():.1f} % · Max {mw["Sparquote"].max():.1f} %</div>
+        </div>""", unsafe_allow_html=True)
+    with sq2:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Letzter Monat ({lsq_lbl})</div>
+            <div class='metric-value {lsq_cls}'>{last_sq:+.1f} %</div>
+            <div class='metric-delta'>Sparquote</div>
+        </div>""", unsafe_allow_html=True)
+    with sq3:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Monate mit posit. Sparquote</div>
+            <div class='metric-value neutral'>{pos_mo} / {len(mw)}</div>
+            <div class='metric-delta'>im gewählten Zeitraum</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Sparquoten-Verlauf ──
+    st.markdown("<div class='section-header'>Sparquoten-Verlauf</div>", unsafe_allow_html=True)
     dot_colors = [C["savings"] if v >= 0 else C["expense"] for v in mw["Sparquote"]]
     fig3 = go.Figure(go.Scatter(
         x=mw["_monat_dt"], y=mw["Sparquote"],
         mode="lines+markers",
         line=dict(color=C["savings"], width=2),
-        marker=dict(size=5, color=dot_colors),
+        marker=dict(size=6, color=dot_colors),
         fill="tozeroy",
         fillcolor="rgba(123,138,255,0.06)",
+        hovertemplate="%{x|%b %Y}: %{y:.1f} %<extra></extra>",
     ))
     fig3.add_hline(y=0, line_color="#4a4a6a", line_width=1)
-    fig3.update_layout(**{**PLOT_CFG,
-        "height": 180,
-        "margin": dict(l=0, r=0, t=8, b=0),
+    fig3.update_layout(**{**PLOT_CFG, "height": 300,
         "yaxis": dict(ticksuffix="%", gridcolor="#2a2a35", linecolor="#2a2a35")})
     st.plotly_chart(fig3, use_container_width=True)
 
-# ─────────────────────────────────────────────
-# VERMÖGENSVERLAUF
-# ─────────────────────────────────────────────
-st.markdown("<div class='section-header'>Vermögensverlauf</div>", unsafe_allow_html=True)
-
-df_s = df.sort_values(c["col_date"]).copy()
-df_s["_flow"]      = df_s[c["col_amount"]]
-df_s["_vermoegen"] = STARTING_WEALTH + df_s["_flow"].cumsum()
-
-fig4 = go.Figure()
-fig4.add_trace(go.Scatter(
-    x=df_s[c["col_date"]], y=df_s["_vermoegen"],
-    mode="lines", fill="tozeroy",
-    fillcolor="rgba(123,138,255,0.08)",
-    line=dict(color=C["savings"], width=2.5),
-    hovertemplate="%{x|%d.%m.%Y}: %{y:,.0f} €<extra></extra>",
-))
-fig4.add_hline(y=0, line_color="#4a4a6a", line_width=1, line_dash="dot")
-fig4.update_layout(**{**PLOT_CFG, "height": 280,
-    "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
-st.plotly_chart(fig4, use_container_width=True)
-
-# ─────────────────────────────────────────────
-# BUDGET-VERGLEICH
-# ─────────────────────────────────────────────
-st.markdown("<div class='section-header'>Budgetvergleich (Ø Monat vs. Ziel)</div>", unsafe_allow_html=True)
-
-avg_by_cat  = (df_exp.groupby(c["col_category"])["_betrag_abs"].sum() / n_months).to_dict()
-cats_with_budget = [cat for cat in sorted(avg_by_cat)
-                    if st.session_state.get(f"budget_{cat}", 0) > 0]
-
-if cats_with_budget:
-    bcols = st.columns(2)
-    for i, cat in enumerate(cats_with_budget):
-        actual    = avg_by_cat[cat]
-        budget    = st.session_state[f"budget_{cat}"]
-        pct       = min(actual / budget * 100, 100)
-        over      = actual > budget
-        bar_color = C["expense"] if over else C["income"]
-        status    = f"<span style='color:{bar_color}'>{'↑ über Budget' if over else '✓ ok'}</span>"
-        with bcols[i % 2]:
-            st.markdown(f"""<div class='budget-bar-container'>
-                <div class='budget-bar-label'>
-                    <span style='color:#c8c8e0;font-weight:500'>{cat}</span>
-                    <span style='color:#6b6b8a;font-family:DM Mono,monospace;font-size:12px'>
-                        {actual:,.0f} € / {budget:,.0f} € · {status}
-                    </span>
-                </div>
-                <div class='budget-bar-bg'>
-                    <div class='budget-bar-fill' style='width:{pct:.1f}%;background:{bar_color}'></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
-else:
-    st.info("Budgets in der Seitenleiste unter **Budgets → ✏️ Anpassen** eintragen, um diesen Bereich zu nutzen.")
-
-# ─────────────────────────────────────────────
-# TRANSAKTIONS-TABELLE
-# ─────────────────────────────────────────────
-with st.expander(f"📋 Alle Transaktionen ({len(df):,})", expanded=False):
-    show_cols = [c["col_date"], c["col_description"], c["col_category"], c["col_amount"]]
-    show_cols = [col for col in show_cols if col in df.columns]
-    disp      = df[show_cols].sort_values(c["col_date"], ascending=False).copy()
-    disp[c["col_date"]] = disp[c["col_date"]].dt.strftime("%d.%m.%Y")
-
-    st.dataframe(
-        disp.reset_index(drop=True),
-        use_container_width=True,
-        height=420,
-        column_config={
-            c["col_amount"]: st.column_config.NumberColumn(format="%.2f €"),
-            c["col_date"]:   st.column_config.TextColumn("Datum"),
-        }
-    )
+    # ── Monatliches Erspartes ──
+    st.markdown("<div class='section-header'>Monatliches Erspartes</div>", unsafe_allow_html=True)
+    bar_colors = [C["savings"] if v >= 0 else C["expense"] for v in mw["Ersparnis"]]
+    fig5 = go.Figure(go.Bar(
+        x=mw["_monat_dt"], y=mw["Ersparnis"],
+        marker_color=bar_colors, opacity=0.85,
+        text=mw["Ersparnis"].apply(lambda x: f"{x:+,.0f} €"),
+        textposition="outside", textfont=dict(color="#9a9ab0", size=10),
+    ))
+    fig5.add_hline(y=0, line_color="#4a4a6a", line_width=1)
+    fig5.update_layout(**{**PLOT_CFG, "height": 280,
+        "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
+    st.plotly_chart(fig5, use_container_width=True)

@@ -123,11 +123,14 @@ _PRESETS = [
 zeitraum_preset = st.selectbox(
     "Zeitraum", _PRESETS, index=0, label_visibility="collapsed",
 )
+_last_month_end   = (today.replace(day=1) - pd.Timedelta(days=1)).date()
+_last_month_start = _last_month_end.replace(day=1)
+
 date_range = None
 if zeitraum_preset == "Benutzerdefiniert":
     date_range = st.date_input(
         "Benutzerdefinierter Zeitraum",
-        value=(min_date, today.date()),
+        value=(_last_month_start, _last_month_end),
         min_value=min_date,
         max_value=max_date,
         format="DD.MM.YYYY",

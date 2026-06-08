@@ -268,31 +268,31 @@ with tab_a:
         sign = "+" if avg_monthly_savings >= 0 else "−"
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Gewinn / Monat</div>
-            <div class='metric-value {cls}'>{sign}{abs(avg_monthly_savings):,.0f} €</div>
-            <div class='metric-delta'>gesamt: {sign}{abs(total_savings):,.0f} €</div>
+            <div class='metric-value {cls}'>{sign}{abs(avg_monthly_savings):,.0f}</div>
+            <div class='metric-delta'>gesamt: {sign}{abs(total_savings):,.0f}</div>
         </div>""", unsafe_allow_html=True)
     with col2:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Einnahmen / Ausgaben</div>
             <div style='display:flex;gap:12px;align-items:baseline'>
-                <span class='metric-value positive' style='font-size:20px'>+{total_income:,.0f} €</span>
+                <span class='metric-value positive' style='font-size:20px'>+{total_income/n_months:,.0f}</span>
                 <span style='color:#4a4a6a;font-size:14px'>/</span>
-                <span class='metric-value negative' style='font-size:20px'>−{total_expense:,.0f} €</span>
+                <span class='metric-value negative' style='font-size:20px'>−{total_expense/n_months:,.0f}</span>
             </div>
-            <div class='metric-delta'>ø {total_income/n_months:,.0f} / {total_expense/n_months:,.0f} €/Mo.</div>
+            <div class='metric-delta'>ø/Mo. · gesamt +{total_income:,.0f} / −{total_expense:,.0f}</div>
         </div>""", unsafe_allow_html=True)
     with col3:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Ø Ausgaben / Tag</div>
-            <div class='metric-value negative'>−{avg_daily_expense:,.2f} €</div>
-            <div class='metric-delta {delta_daily_cls}'>{delta_daily_sign}{abs(delta_daily):,.2f} € ggü. Ø 14 Tage</div>
+            <div class='metric-value negative'>−{avg_daily_expense:,.2f}</div>
+            <div class='metric-delta {delta_daily_cls}'>{delta_daily_sign}{abs(delta_daily):,.2f} ggü. Ø 14 Tage</div>
         </div>""", unsafe_allow_html=True)
     with col4:
         wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Aktuelles Vermögen</div>
-            <div class='metric-value {wcls}'>{current_wealth:,.0f} €</div>
-            <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
+            <div class='metric-value {wcls}'>{current_wealth:,.0f}</div>
+            <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f}</div>
         </div>""", unsafe_allow_html=True)
     with col5:
         st.markdown(f"""<div class='metric-card'>
@@ -589,7 +589,7 @@ with tab_k:
     _GRAN_OPTS = ["Wöchentlich", "Monatlich", "Jährlich"]
     _PLOT_CFG_KAT = {"locale": "de", "displaylogo": False}
 
-    def _cat_table(df_src, total_months):
+    def _cat_table(df_src, total_months, total_days):
         stats = (
             df_src.groupby(c["col_category"])["_betrag_abs"]
             .agg(Gesamt="sum", Buchungen="count")
@@ -597,20 +597,22 @@ with tab_k:
             .rename(columns={c["col_category"]: "Kategorie"})
         )
         grand = stats["Gesamt"].sum()
-        stats["% Gesamt"]    = stats["Gesamt"] / grand * 100 if grand else 0
         stats["ø / Monat"]   = stats["Gesamt"] / total_months
+        stats["ø / Tag"]     = stats["Gesamt"] / total_days
         stats["€ / Buchung"] = stats["Gesamt"] / stats["Buchungen"].replace(0, float("nan"))
+        stats["% Gesamt"]    = stats["Gesamt"] / grand * 100 if grand else 0
         stats = stats.sort_values("Gesamt", ascending=False).reset_index(drop=True)
+        stats = stats[["Kategorie", "Gesamt", "ø / Monat", "ø / Tag", "€ / Buchung", "% Gesamt", "Buchungen"]]
 
         def _white(v):
             return "color: #e8e6e1" if isinstance(v, (int, float)) else ""
 
-        num_cols = ["Gesamt", "% Gesamt", "ø / Monat", "Buchungen", "€ / Buchung"]
+        num_cols = ["Gesamt", "ø / Monat", "ø / Tag", "€ / Buchung", "% Gesamt", "Buchungen"]
         return _style_map(
             stats.style.format(
                 {"Gesamt": "{:,.0f} €", "% Gesamt": "{:.1f} %",
-                 "ø / Monat": "{:,.0f} €", "Buchungen": "{:,.0f}",
-                 "€ / Buchung": "{:,.0f} €"},
+                 "ø / Monat": "{:,.0f} €", "ø / Tag": "{:,.2f} €",
+                 "Buchungen": "{:,.0f}", "€ / Buchung": "{:,.0f} €"},
                 na_rep="–",
             ),
             _white, num_cols,
@@ -668,7 +670,7 @@ with tab_k:
     kat_exp, kat_inc = st.tabs(["📉 Ausgaben", "📈 Einnahmen"])
 
     with kat_exp:
-        exp_styled, exp_stats = _cat_table(df_exp, n_months)
+        exp_styled, exp_stats = _cat_table(df_exp, n_months, days_in_period)
         st.dataframe(exp_styled, use_container_width=True,
                      height=min(400, 36 + len(exp_stats) * 35),
                      hide_index=True)
@@ -682,7 +684,7 @@ with tab_k:
         st.plotly_chart(_trend_chart(df_exp, exp_period), use_container_width=True, config=_PLOT_CFG_KAT)
 
     with kat_inc:
-        inc_styled, inc_stats = _cat_table(df_inc, n_months)
+        inc_styled, inc_stats = _cat_table(df_inc, n_months, days_in_period)
         st.dataframe(inc_styled, use_container_width=True,
                      height=min(300, 36 + len(inc_stats) * 35),
                      hide_index=True)

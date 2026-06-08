@@ -246,41 +246,59 @@ with tab_a:
 
     st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
 
-    kpi_ctx = f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
+    kpi_ctx             = f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
+    days_in_period      = max((end_dt - start_dt).days + 1, 1)
+    avg_daily_expense   = total_expense / days_in_period
+    avg_monthly_savings = total_savings / n_months
+
+    fourteen_days_ago = today - pd.Timedelta(days=14)
+    exp_14d_sum      = df_all[
+        (df_all[c["col_date"]] > fourteen_days_ago) &
+        (df_all[c["col_date"]] <= today) &
+        (df_all["_typ"] == "Ausgabe")
+    ]["_betrag_abs"].sum()
+    avg_daily_14d    = exp_14d_sum / 14
+    delta_daily      = avg_daily_expense - avg_daily_14d
+    delta_daily_cls  = "negative" if delta_daily > 0 else "positive"
+    delta_daily_sign = "+" if delta_daily >= 0 else "−"
 
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
+        cls  = "positive" if avg_monthly_savings >= 0 else "negative"
+        sign = "+" if avg_monthly_savings >= 0 else "−"
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Gewinn / Monat</div>
+            <div class='metric-value {cls}'>{sign}{abs(avg_monthly_savings):,.0f} €</div>
+            <div class='metric-delta'>gesamt: {sign}{abs(total_savings):,.0f} €</div>
+        </div>""", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Einnahmen / Ausgaben</div>
+            <div style='display:flex;gap:12px;align-items:baseline'>
+                <span class='metric-value positive' style='font-size:20px'>+{total_income:,.0f} €</span>
+                <span style='color:#4a4a6a;font-size:14px'>/</span>
+                <span class='metric-value negative' style='font-size:20px'>−{total_expense:,.0f} €</span>
+            </div>
+            <div class='metric-delta'>ø {total_income/n_months:,.0f} / {total_expense/n_months:,.0f} €/Mo.</div>
+        </div>""", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ø Ausgaben / Tag</div>
+            <div class='metric-value negative'>−{avg_daily_expense:,.2f} €</div>
+            <div class='metric-delta {delta_daily_cls}'>{delta_daily_sign}{abs(delta_daily):,.2f} € ggü. Ø 14 Tage</div>
+        </div>""", unsafe_allow_html=True)
+    with col4:
         wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Aktuelles Vermögen</div>
             <div class='metric-value {wcls}'>{current_wealth:,.0f} €</div>
             <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f} €</div>
         </div>""", unsafe_allow_html=True)
-    with col2:
-        cls  = "positive" if total_savings >= 0 else "negative"
-        sign = "+" if total_savings >= 0 else "−"
-        st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Gewinn</div>
-            <div class='metric-value {cls}'>{sign}{abs(total_savings):,.0f} €</div>
-            <div class='metric-delta'>ø {total_savings/n_months:,.0f} €/Monat</div>
-        </div>""", unsafe_allow_html=True)
-    with col3:
+    with col5:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Zeitraum</div>
             <div class='metric-value neutral'>{n_months} Mo.</div>
             <div class='metric-delta'>{kpi_ctx}</div>
-        </div>""", unsafe_allow_html=True)
-    with col4:
-        st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Einnahmen</div>
-            <div class='metric-value positive'>+{total_income:,.0f} €</div>
-            <div class='metric-delta'>ø {total_income/n_months:,.0f} €/Monat</div>
-        </div>""", unsafe_allow_html=True)
-    with col5:
-        st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Ausgaben</div>
-            <div class='metric-value negative'>−{total_expense:,.0f} €</div>
-            <div class='metric-delta'>ø {total_expense/n_months:,.0f} €/Monat</div>
         </div>""", unsafe_allow_html=True)
 
     # Einnahmen vs. Ausgaben
@@ -493,24 +511,6 @@ with tab_s:
             <div class='metric-value neutral'>{pos_mo} / {total_mo}</div>
             <div class='metric-delta'>gewählter Zeitraum · {pos_pct:.0f} %</div>
         </div>""", unsafe_allow_html=True)
-
-    st.markdown(
-        "<div class='section-header'>Sparquoten-Verlauf</div>",
-        unsafe_allow_html=True,
-    )
-    dot_colors = [C["savings"] if v >= 0 else C["expense"] for v in mw2["Sparquote"]]
-    fig3 = go.Figure(go.Scatter(
-        x=mw2["_monat_dt"], y=mw2["Sparquote"],
-        mode="lines+markers",
-        line=dict(color=C["savings"], width=2),
-        marker=dict(size=6, color=dot_colors),
-        fill="tozeroy", fillcolor="rgba(123,138,255,0.06)",
-        hovertemplate="%{x|%b %Y}: %{y:.1f} %<extra></extra>",
-    ))
-    fig3.add_hline(y=0, line_color="#4a4a6a", line_width=1)
-    fig3.update_layout(**{**PLOT_CFG, "height": 300,
-        "yaxis": dict(ticksuffix="%", gridcolor="#2a2a35", linecolor="#2a2a35")})
-    st.plotly_chart(fig3, use_container_width=True, config={"locale": "de", "displaylogo": False})
 
     st.markdown(
         "<div class='section-header'>Monatlicher Gewinn</div>",

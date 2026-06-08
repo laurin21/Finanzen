@@ -184,6 +184,13 @@ if len(df) == 0:
     st.warning("Keine Transaktionen für die gewählten Filter.")
     st.stop()
 
+st.markdown(
+    f"<div style='font-size:11px;color:#6b6b8a;font-family:DM Mono,monospace;margin-bottom:12px'>"
+    f"{n_months} Monat{'e' if n_months != 1 else ''} &nbsp;·&nbsp; "
+    f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}</div>",
+    unsafe_allow_html=True,
+)
+
 # ─────────────────────────────────────────────
 # VORBERECHNUNGEN
 # ─────────────────────────────────────────────
@@ -249,7 +256,6 @@ with tab_a:
 
     st.markdown("<div class='section-header'>Übersicht</div>", unsafe_allow_html=True)
 
-    kpi_ctx             = f"{start_dt.strftime('%d.%m.%Y')} – {end_dt.strftime('%d.%m.%Y')}"
     days_in_period      = max((end_dt - start_dt).days + 1, 1)
     avg_daily_expense   = total_expense / days_in_period
     avg_monthly_savings = total_savings / n_months
@@ -276,32 +282,28 @@ with tab_a:
         </div>""", unsafe_allow_html=True)
     with col2:
         st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Einnahmen / Ausgaben</div>
-            <div style='display:flex;gap:12px;align-items:baseline'>
-                <span class='metric-value positive' style='font-size:20px'>+{total_income/n_months:,.0f}</span>
-                <span style='color:#4a4a6a;font-size:14px'>/</span>
-                <span class='metric-value negative' style='font-size:20px'>−{total_expense/n_months:,.0f}</span>
-            </div>
-            <div class='metric-delta'>ø/Mo. · gesamt +{total_income:,.0f} / −{total_expense:,.0f}</div>
+            <div class='metric-label'>Einnahmen / Monat</div>
+            <div class='metric-value positive'>+{total_income/n_months:,.0f}</div>
+            <div class='metric-delta'>gesamt: +{total_income:,.0f}</div>
         </div>""", unsafe_allow_html=True)
     with col3:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ausgaben / Monat</div>
+            <div class='metric-value negative'>−{total_expense/n_months:,.0f}</div>
+            <div class='metric-delta'>gesamt: −{total_expense:,.0f}</div>
+        </div>""", unsafe_allow_html=True)
+    with col4:
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Ø Ausgaben / Tag</div>
             <div class='metric-value negative'>−{avg_daily_expense:,.2f}</div>
             <div class='metric-delta {delta_daily_cls}'>{delta_daily_sign}{abs(delta_daily):,.2f} ggü. Ø 14 Tage</div>
         </div>""", unsafe_allow_html=True)
-    with col4:
+    with col5:
         wcls = "positive" if current_wealth >= STARTING_WEALTH else "negative"
         st.markdown(f"""<div class='metric-card'>
             <div class='metric-label'>Aktuelles Vermögen</div>
             <div class='metric-value {wcls}'>{current_wealth:,.0f}</div>
             <div class='metric-delta'>Start: {STARTING_WEALTH:,.2f}</div>
-        </div>""", unsafe_allow_html=True)
-    with col5:
-        st.markdown(f"""<div class='metric-card'>
-            <div class='metric-label'>Zeitraum</div>
-            <div class='metric-value neutral'>{n_months} Mo.</div>
-            <div class='metric-delta'>{kpi_ctx}</div>
         </div>""", unsafe_allow_html=True)
 
     # Einnahmen vs. Ausgaben

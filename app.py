@@ -244,11 +244,12 @@ def _style_map(styler, func, subset):
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab_a, tab_m, tab_k, tab_s = st.tabs([
+tab_a, tab_m, tab_k, tab_s, tab_p = st.tabs([
     "\U0001f4ca Analyse",
     "\U0001f4c5 Monatsübersicht",
     "\U0001f5c2️ Kategorien",
     "\U0001f4c8 Sparquoten",
+    "\U0001f52e Prognose",
 ])
 
 # ══════════════════════════════════════════════
@@ -702,6 +703,131 @@ with tab_k:
         st.plotly_chart(fig_inc_stack, use_container_width=True, config=_PLOT_CFG_KAT)
         if len(inc_stats) > 1:
             st.plotly_chart(_trend_chart(df_inc, inc_period), use_container_width=True, config=_PLOT_CFG_KAT)
+
+# ══════════════════════════════════════════════
+with tab_p:
+
+    # ── Datenbasis: alle abgeschlossenen Monate (ungefiltert) ──
+    mw_all       = build_mw(df_all_today)
+    mw_all_comp  = mw_all[mw_all["_monat_dt"] < current_month_start].copy()
+
+    st.markdown("<div class='section-header'>Einstellungen</div>", unsafe_allow_html=True)
+    pc1, pc2 = st.columns([1, 1])
+    with pc1:
+        p_horizon = st.slider("Prognosehorizont (Monate)", 1, 36, 12)
+    with pc2:
+        p_basis_lbl = st.radio(
+            "Datenbasis", ["3 Monate", "6 Monate", "12 Monate", "Alle"],
+            index=2, horizontal=True,
+        )
+
+    p_basis_n = {"3 Monate": 3, "6 Monate": 6, "12 Monate": 12, "Alle": None}[p_basis_lbl]
+    mw_basis  = mw_all_comp.tail(p_basis_n) if p_basis_n else mw_all_comp
+
+    avg_inc = mw_basis["Einnahme"].mean() if len(mw_basis) else 0
+    avg_exp = mw_basis["Ausgabe"].mean()  if len(mw_basis) else 0
+    avg_sav = avg_inc - avg_exp
+    avg_sq  = (avg_sav / avg_inc * 100) if avg_inc > 0 else 0
+
+    # ── KPIs ──────────────────────────────────
+    st.markdown("<div class='section-header'>Basis (abgeschl. Monate)</div>", unsafe_allow_html=True)
+    pk1, pk2, pk3, pk4 = st.columns(4)
+    with pk1:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ø Einnahmen / Monat</div>
+            <div class='metric-value positive'>+{avg_inc:,.0f}</div>
+            <div class='metric-delta'>{len(mw_basis)} Monate Basis</div>
+        </div>""", unsafe_allow_html=True)
+    with pk2:
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ø Ausgaben / Monat</div>
+            <div class='metric-value negative'>−{avg_exp:,.0f}</div>
+            <div class='metric-delta'>{p_basis_lbl}</div>
+        </div>""", unsafe_allow_html=True)
+    with pk3:
+        scls  = "positive" if avg_sav >= 0 else "negative"
+        ssign = "+" if avg_sav >= 0 else "−"
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Ø Gewinn / Monat</div>
+            <div class='metric-value {scls}'>{ssign}{abs(avg_sav):,.0f}</div>
+            <div class='metric-delta'>Sparquote {avg_sq:.1f} %</div>
+        </div>""", unsafe_allow_html=True)
+    with pk4:
+        proj_end_wealth = current_wealth + avg_sav * p_horizon
+        wcls = "positive" if proj_end_wealth >= current_wealth else "negative"
+        st.markdown(f"""<div class='metric-card'>
+            <div class='metric-label'>Vermögen in {p_horizon} Mo.</div>
+            <div class='metric-value {wcls}'>{proj_end_wealth:,.0f}</div>
+            <div class='metric-delta'>heute: {current_wealth:,.0f}</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Projektion berechnen ───────────────────
+    proj_rows = []
+    for i in range(1, p_horizon + 1):
+        month_dt = (today.to_period("M") + i).to_timestamp()
+        proj_rows.append({
+            "Monat_dt":  month_dt,
+            "Monat":     month_dt.strftime("%b %Y"),
+            "Einnahmen": avg_inc,
+            "Ausgaben":  avg_exp,
+            "Gewinn":    avg_sav,
+            "Vermögen":  current_wealth + avg_sav * i,
+        })
+    proj_df = pd.DataFrame(proj_rows)
+
+    # ── Verlaufs-Chart: Ist + Prognose ────────
+    st.markdown("<div class='section-header'>Vermögensverlauf + Prognose</div>", unsafe_allow_html=True)
+
+    df_hist = df_all_today.sort_values(c["col_date"]).copy()
+    df_hist["_vermoegen"] = STARTING_WEALTH + df_hist[c["col_amount"]].cumsum()
+
+    fig_prog = go.Figure()
+    fig_prog.add_trace(go.Scatter(
+        x=df_hist[c["col_date"]], y=df_hist["_vermoegen"],
+        mode="lines", name="Ist",
+        line=dict(color=C["savings"], width=2.5),
+        fill="tozeroy", fillcolor="rgba(123,138,255,0.07)",
+        hovertemplate="%{x|%d.%m.%Y}: %{y:,.0f} €<extra></extra>",
+    ))
+    fig_prog.add_trace(go.Scatter(
+        x=proj_df["Monat_dt"], y=proj_df["Vermögen"],
+        mode="lines+markers", name="Prognose",
+        line=dict(color=C["income"], width=2, dash="dot"),
+        marker=dict(size=5, color=C["income"]),
+        hovertemplate="%{x|%b %Y}: %{y:,.0f} €<extra></extra>",
+    ))
+    fig_prog.add_vline(
+        x=today.timestamp() * 1000, line_color="#4a4a6a",
+        line_width=1, line_dash="dot",
+        annotation_text="Heute", annotation_font_color="#6b6b8a",
+        annotation_position="top right",
+    )
+    fig_prog.add_hline(y=0, line_color="#4a4a6a", line_width=1, line_dash="dot")
+    fig_prog.update_layout(**{**PLOT_CFG, "height": 320,
+        "yaxis": dict(ticksuffix=" €", gridcolor="#2a2a35", linecolor="#2a2a35")})
+    st.plotly_chart(fig_prog, use_container_width=True, config={"locale": "de", "displaylogo": False})
+
+    # ── Monatliche Prognose-Tabelle ────────────
+    st.markdown("<div class='section-header'>Monatliche Prognose</div>", unsafe_allow_html=True)
+
+    proj_disp = proj_df[["Monat", "Einnahmen", "Ausgaben", "Gewinn", "Vermögen"]].copy()
+
+    def _col_proj(v):
+        if isinstance(v, (int, float)):
+            return "color: #e05c6a" if v < 0 else "color: #e8e6e1"
+        return ""
+
+    styled_proj = _style_map(
+        proj_disp.style.format(
+            {"Einnahmen": "{:,.0f} €", "Ausgaben": "{:,.0f} €",
+             "Gewinn": "{:+,.0f} €", "Vermögen": "{:,.0f} €"},
+            na_rep="–",
+        ),
+        _col_proj, ["Einnahmen", "Ausgaben", "Gewinn", "Vermögen"],
+    )
+    st.dataframe(styled_proj, use_container_width=True,
+                 height=min(600, 36 + len(proj_disp) * 35),
+                 hide_index=True)
 
 # ─────────────────────────────────────────────
 # BUDGET-EXPANDER
